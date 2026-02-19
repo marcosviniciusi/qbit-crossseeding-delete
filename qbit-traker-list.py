@@ -4,9 +4,9 @@ from collections import defaultdict
 from urllib.parse import urlparse
 
 # Configuração
-QB_URL = "http://qbittorrentADDRESS:PORT"
+QB_URL = "http://localhost:8080"
 QB_USER = "USER"
-QB_PASS = "PASSWORD"
+QB_PASS = "PASS"
 
 def get_all_trackers():
     session = requests.Session()
@@ -34,7 +34,10 @@ def get_all_trackers():
             if url.startswith("**"):
                 continue
             try:
-                domain = urlparse(url).netloc or url
+                parsed = urlparse(url)
+                netloc = parsed.netloc or url
+                # Remove porta, ex: "tracker.example.com:6969" -> "tracker.example.com"
+                domain = netloc.split(":")[0] if ":" in netloc else netloc
             except:
                 domain = url
 
