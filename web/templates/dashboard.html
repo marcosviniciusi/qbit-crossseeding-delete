@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - qBit Manager{% endblock %}
+
+{% block content %}
+<!-- Stats Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-sm-6">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small">Status</div>
+                        <div class="fs-4 fw-bold" id="stat-status">--</div>
+                    </div>
+                    <i class="bi bi-activity fs-1 text-muted"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small">Runs (24h)</div>
+                        <div class="fs-4 fw-bold" id="stat-runs-24h">--</div>
+                    </div>
+                    <i class="bi bi-arrow-repeat fs-1 text-muted"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small">Total Pausas</div>
+                        <div class="fs-4 fw-bold" id="stat-pauses">--</div>
+                    </div>
+                    <i class="bi bi-pause-circle fs-1 text-muted"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small">Seed Deletados</div>
+                        <div class="fs-4 fw-bold" id="stat-deletions">--</div>
+                    </div>
+                    <i class="bi bi-trash fs-1 text-muted"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Disk Space Chart -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-hdd"></i> Espaco em Disco (GB)</span>
+                <select class="form-select form-select-sm w-auto" id="disk-limit">
+                    <option value="24">24 runs</option>
+                    <option value="50" selected>50 runs</option>
+                    <option value="100">100 runs</option>
+                    <option value="200">200 runs</option>
+                </select>
+            </div>
+            <div class="card-body">
+                <canvas id="diskChart" height="120"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-pie-chart"></i> Estados dos Torrents</div>
+            <div class="card-body">
+                <canvas id="statesChart" height="180"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Runs History & Tracker Distribution -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-graph-up"></i> Historico de Runs</div>
+            <div class="card-body">
+                <canvas id="runsChart" height="120"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-diagram-3"></i> Torrents por Tracker</div>
+            <div class="card-body">
+                <canvas id="trackerChart" height="180"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Events -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-clock-history"></i> Eventos de Pausa Recentes</div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>Data</th><th>Tipo</th><th>Motivo</th><th>Torrents</th></tr></thead>
+                        <tbody id="pause-events-table"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-trash3"></i> Delecoes Recentes (Seed Cleaner)</div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>Data</th><th>Nome</th><th>Tracker</th><th>Dias</th><th>Tamanho</th></tr></thead>
+                        <tbody id="deletions-table"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

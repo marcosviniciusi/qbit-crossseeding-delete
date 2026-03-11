@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Servico - qBit Manager{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-gear"></i> Controle do Servico</div>
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-4">
+                    <div class="me-3">
+                        <span class="badge fs-6" id="service-badge">Verificando...</span>
+                    </div>
+                    <div class="text-muted" id="service-status-text"></div>
+                </div>
+
+                <div class="btn-group mb-3" role="group">
+                    <button class="btn btn-success" onclick="serviceAction('start')">
+                        <i class="bi bi-play-fill"></i> Iniciar
+                    </button>
+                    <button class="btn btn-danger" onclick="serviceAction('stop')">
+                        <i class="bi bi-stop-fill"></i> Parar
+                    </button>
+                    <button class="btn btn-warning" onclick="serviceAction('restart')">
+                        <i class="bi bi-arrow-clockwise"></i> Reiniciar
+                    </button>
+                </div>
+
+                <div class="mb-3">
+                    <button class="btn btn-outline-primary" onclick="runNow()" id="btn-run-now">
+                        <i class="bi bi-lightning"></i> Executar Agora
+                    </button>
+                </div>
+
+                <div id="service-output" class="d-none">
+                    <div class="alert" id="service-alert"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-info-circle"></i> Detalhes do Servico</div>
+            <div class="card-body">
+                <pre class="bg-dark text-light p-3 rounded" id="service-detail" style="max-height: 400px; overflow-y: auto; font-size: 0.85rem;">Carregando...</pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Run Output -->
+<div class="row g-3 mt-2">
+    <div class="col-12">
+        <div class="card d-none" id="run-output-card">
+            <div class="card-header"><i class="bi bi-terminal"></i> Saida da Execucao Manual</div>
+            <div class="card-body">
+                <pre class="bg-dark text-light p-3 rounded" id="run-output" style="max-height: 500px; overflow-y: auto; font-size: 0.85rem;"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function loadServiceStatus() {
+    fetch('/api/service/status')
+        .then(r => r.json())
+        .then(data => {
+            const badge = document.getElementById('service-badge');
+            badge.textContent = data.status || 'unknown';
+            badge.className = 'badge fs-6 ' + (data.active ? 'bg-success' : 'bg-danger');
+            document.getElementById('service-status-text').textContent =
+                data.active ? 'Servico em execucao' : 'Servico parado';
+            document.getElementById('service-detail').textContent = data.detail || 'Sem detalhes';
+        })
+        .catch(() => {
+            document.getElementById('service-badge').textContent = 'Erro';
+            document.getElementById('service-badge').className = 'badge fs-6 bg-secondary';
+        });
+}
+
+function serviceAction(action) {
+    const output = document.getElementById('service-output');
+    const alert = document.getElementById('service-alert');
+    output.classList.remove('d-none');
+    alert.className = 'alert alert-info';
+    alert.textContent = 'Executando...';
+
+    fetch(`/api/service/${action}`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            alert.className = 'alert ' + (data.success ? 'alert-success' : 'alert-danger');
+            alert.textContent = data.success
+                ? `Acao "${action}" executada com sucesso`
+                : `Erro: ${data.error || data.output}`;
+            setTimeout(loadServiceStatus, 1000);
+        })
+        .catch(e => {
+            alert.className = 'alert alert-danger';
+            alert.textContent = `Erro: ${e.message}`;
+        });
+}
+
+function runNow() {
+    const btn = document.getElementById('btn-run-now');
+    const card = document.getElementById('run-output-card');
+    const output = document.getElementById('run-output');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Executando...';
+    card.classList.remove('d-none');
+    output.textContent = 'Executando qbit-manager.py... aguarde...\n';
+
+    fetch('/api/service/run-now', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            output.textContent = data.output || '';
+            if (data.error) output.textContent += '\n--- STDERR ---\n' + data.error;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-lightning"></i> Executar Agora';
+        })
+        .catch(e => {
+            output.textContent = `Erro: ${e.message}`;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-lightning"></i> Executar Agora';
+        });
+}
+
+loadServiceStatus();
+setInterval(loadServiceStatus, 15000);
+</script>
+{% endblock %}

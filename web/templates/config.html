@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Configuracao - qBit Manager{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <!-- Config Editor -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-file-code"></i> config.py</span>
+                <button class="btn btn-primary btn-sm" onclick="saveConfig('config')">
+                    <i class="bi bi-save"></i> Salvar
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <textarea class="form-control code-editor" id="config-editor"
+                    spellcheck="false" rows="25"></textarea>
+            </div>
+            <div class="card-footer">
+                <small class="text-muted" id="config-path"></small>
+                <span id="config-save-status" class="ms-2"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tracker Rules Editor -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-file-code"></i> tracker_rules.py</span>
+                <button class="btn btn-primary btn-sm" onclick="saveConfig('tracker-rules')">
+                    <i class="bi bi-save"></i> Salvar
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <textarea class="form-control code-editor" id="tracker-rules-editor"
+                    spellcheck="false" rows="25"></textarea>
+            </div>
+            <div class="card-footer">
+                <small class="text-muted" id="tracker-rules-path"></small>
+                <span id="tracker-rules-save-status" class="ms-2"></span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function loadConfig(endpoint, editorId, pathId) {
+    fetch(`/api/${endpoint}`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById(editorId).value = data.content || '';
+            document.getElementById(pathId).textContent = data.path || '';
+            if (data.error) {
+                document.getElementById(editorId).placeholder =
+                    `Arquivo nao encontrado: ${data.path}\nCrie o arquivo ou insira o conteudo aqui.`;
+            }
+        });
+}
+
+function saveConfig(type) {
+    const editorId = type === 'config' ? 'config-editor' : 'tracker-rules-editor';
+    const statusId = type === 'config' ? 'config-save-status' : 'tracker-rules-save-status';
+    const content = document.getElementById(editorId).value;
+    const status = document.getElementById(statusId);
+
+    status.innerHTML = '<span class="text-info">Salvando...</span>';
+
+    fetch(`/api/${type}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            status.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> Salvo!</span>';
+        } else {
+            status.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle"></i> ${data.error}</span>`;
+        }
+        setTimeout(() => { status.innerHTML = ''; }, 3000);
+    })
+    .catch(e => {
+        status.innerHTML = `<span class="text-danger">Erro: ${e.message}</span>`;
+    });
+}
+
+// Ctrl+S para salvar
+document.getElementById('config-editor').addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveConfig('config'); }
+});
+document.getElementById('tracker-rules-editor').addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveConfig('tracker-rules'); }
+});
+
+// Tab em textarea
+document.querySelectorAll('.code-editor').forEach(el => {
+    el.addEventListener('keydown', e => {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            const start = el.selectionStart;
+            el.value = el.value.substring(0, start) + '    ' + el.value.substring(el.selectionEnd);
+            el.selectionStart = el.selectionEnd = start + 4;
+        }
+    });
+});
+
+loadConfig('config', 'config-editor', 'config-path');
+loadConfig('tracker-rules', 'tracker-rules-editor', 'tracker-rules-path');
+</script>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Logs - qBit Manager{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-terminal"></i> Logs</span>
+        <div class="d-flex gap-2 align-items-center">
+            <select class="form-select form-select-sm w-auto" id="log-source">
+                <option value="journalctl">journalctl</option>
+                <option value="file">Arquivo</option>
+            </select>
+            <select class="form-select form-select-sm w-auto" id="log-lines">
+                <option value="50">50 linhas</option>
+                <option value="100">100 linhas</option>
+                <option value="200" selected>200 linhas</option>
+                <option value="500">500 linhas</option>
+            </select>
+            <div class="form-check form-switch ms-2">
+                <input class="form-check-input" type="checkbox" id="auto-refresh" checked>
+                <label class="form-check-label small" for="auto-refresh">Auto</label>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" onclick="loadLogs()">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <pre class="log-viewer" id="log-content">Carregando...</pre>
+    </div>
+    <div class="card-footer">
+        <small class="text-muted">Fonte: <span id="log-source-label">--</span></small>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let logRefreshInterval = null;
+
+function loadLogs() {
+    const source = document.getElementById('log-source').value;
+    const lines = document.getElementById('log-lines').value;
+    const content = document.getElementById('log-content');
+
+    fetch(`/api/logs?source=${source}&lines=${lines}`)
+        .then(r => r.json())
+        .then(data => {
+            content.textContent = data.logs || 'Nenhum log encontrado';
+            document.getElementById('log-source-label').textContent = data.source;
+            // Scroll para o final
+            content.scrollTop = content.scrollHeight;
+        })
+        .catch(e => {
+            content.textContent = `Erro ao carregar logs: ${e.message}`;
+        });
+}
+
+function setupAutoRefresh() {
+    if (logRefreshInterval) clearInterval(logRefreshInterval);
+    if (document.getElementById('auto-refresh').checked) {
+        logRefreshInterval = setInterval(loadLogs, 10000);
+    }
+}
+
+document.getElementById('auto-refresh').addEventListener('change', setupAutoRefresh);
+document.getElementById('log-source').addEventListener('change', loadLogs);
+document.getElementById('log-lines').addEventListener('change', loadLogs);
+
+loadLogs();
+setupAutoRefresh();
+</script>
+{% endblock %}
