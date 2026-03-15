@@ -4,7 +4,7 @@
 # Gerenciamento modular: checagem de disco -> limpeza -> ativacao
 #
 # Diretorios:
-#   CONFIG_DIR  → /etc/qbit-manager           (config.py, notificacao.py, tracker_rules.py)
+#   CONFIG_DIR  → /etc/qbit-manager           (config.py, tracker_rules.py)
 #   INSTALL_DIR → /usr/local/lib/qbit-manager  (este script + pasta modulos/)
 #   DB_DIR      → /var/lib/qbit-manager        (qbit.db)
 #
@@ -13,7 +13,6 @@
 import os
 import sys
 import qbittorrentapi
-import requests
 
 # ── 1. Carregar config.py ────────────────────────────────────────────────────
 # CONFIG_DIR: onde fica o config.py (credenciais, discos, regras)
@@ -86,23 +85,19 @@ except NameError:
 from modulos.db import init_db
 from modulos.otel import configurar_otel
 from modulos.checagem_disco import executar_checagem
+from modulos.notificacao import criar_notificador
 
-# Carregar notificacao.py do CONFIG_DIR (se existir)
+# ── 6. Criar notificador a partir do config ─────────────────────────────────
 try:
-    from notificacao import enviar_notificacao
-except ImportError:
-    def enviar_notificacao(titulo, mensagem, priority=0, event_type=None):
-        """Fallback Pushover"""
-        try:
-            requests.post("https://api.pushover.net/1/messages.json", data={
-                "token":    PUSHOVER_TOKEN,
-                "user":     PUSHOVER_USER,
-                "title":    titulo,
-                "message":  mensagem,
-                "priority": priority
-            })
-        except Exception as e:
-            print(f"[Erro Pushover] {e}")
+    _notif_tipo = NOTIFICACAO_TIPO
+except NameError:
+    _notif_tipo = "nenhum"
+try:
+    _notif_config = NOTIFICACAO_CONFIG
+except NameError:
+    _notif_config = {}
+
+enviar_notificacao = criar_notificador(_notif_tipo, _notif_config)
 
 
 def main():

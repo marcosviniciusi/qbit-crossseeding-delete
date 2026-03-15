@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
 # =============================================================================
-# generate_tracker_rules.py
-# Gera a lista de trackers com contagem de torrents para uso no tracker_rules.py
+# qbit-traker-list.py
+# Gera a lista de trackers com contagem de torrents para uso no config.py
 #
 # Uso:
-#   python generate_tracker_rules.py
+#   python3 qbit-traker-list.py
 #
-# O script lê as credenciais do qBittorrent do mesmo config.py usado pelo
-# qb_unified_manager.py. Ajuste CONFIG_DIR abaixo se necessário.
+# Le as credenciais do config.py e usa os modulos compartilhados.
 # =============================================================================
 
+import os
 import sys
-import requests
+import qbittorrentapi
 from collections import defaultdict
-from urllib.parse import urlparse
 
-# Diretório de configuração — deve ser o mesmo do qb_unified_manager.py
+# ── Carregar config.py ───────────────────────────────────────────────────────
 CONFIG_DIR = "/etc/qbit-manager"
-
-# Windows: CONFIG_DIR = r"C:\qbit-manager\config"
 
 if CONFIG_DIR not in sys.path:
     sys.path.insert(0, CONFIG_DIR)
@@ -29,35 +26,34 @@ try:
 except ImportError:
     print(f"❌ Não foi possível carregar config.py de {CONFIG_DIR}")
     print(f"   Ajuste CONFIG_DIR no topo deste script.")
-    exit(1)
-except NameError as e:
-    print(f"❌ Variável não encontrada no config.py: {e}")
-    exit(1)
+    sys.exit(1)
+
+# ── Resolver INSTALL_DIR para encontrar modulos/ ────────────────────────────
+try:
+    from config import INSTALL_DIR
+except ImportError:
+    INSTALL_DIR = os.path.dirname(os.path.abspath(__file__))
+
+if INSTALL_DIR not in sys.path:
+    sys.path.insert(0, INSTALL_DIR)
+
+from modulos.helpers import extrair_dominio_tracker
 
 
-def extrair_dominio(url):
+def gerar_lista_trackers():
+    # Conectar via qbittorrent-api (mesmo que o manager)
+    client = qbittorrentapi.Client(host=QB_URL, username=QB_USER, password=QB_PASS)
     try:
-        parsed = urlparse(url)
-        netloc = parsed.netloc or url
-        return netloc.split(":")[0] if ":" in netloc else netloc
-    except:
-        return url
+        client.auth_log_in()
+        print("✅ Conectado ao qBittorrent\n")
+    except qbittorrentapi.LoginFailed:
+        print("❌ Falha ao autenticar")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Erro ao conectar: {e}")
+        sys.exit(1)
 
-
-def get_all_trackers():
-    session = requests.Session()
-
-    r = session.post(f"{QB_URL}/api/v2/auth/login", data={
-        "username": QB_USER,
-        "password": QB_PASS
-    })
-    if r.text != "Ok.":
-        print(f"❌ Erro no login: {r.text}")
-        return
-
-    print("✅ Conectado ao qBittorrent\n")
-
-    torrents = session.get(f"{QB_URL}/api/v2/torrents/info").json()
+    torrents = client.torrents_info()
     print(f"📦 Total de torrents: {len(torrents)}\n")
 
     tracker_count = defaultdict(int)
@@ -66,17 +62,17 @@ def get_all_trackers():
         if i % 100 == 0:
             print(f"   Processando... {i}/{len(torrents)}")
 
-        trackers = session.get(
-            f"{QB_URL}/api/v2/torrents/trackers",
-            params={"hash": torrent["hash"]}
-        ).json()
+        try:
+            trackers = client.torrents_trackers(torrent.hash)
+        except:
+            continue
 
         for tracker in trackers:
-            url = tracker.get("url", "")
+            url = getattr(tracker, 'url', '')
             if url.startswith("**"):
                 continue
-            domain = extrair_dominio(url)
-            if domain:
+            domain = extrair_dominio_tracker(url)
+            if domain and domain != "unknown":
                 tracker_count[domain] += 1
 
     # Tabela resumo
@@ -87,9 +83,9 @@ def get_all_trackers():
 
     print(f"\nTotal de trackers únicos: {len(tracker_count)}")
 
-    # Gera bloco pronto para tracker_rules.py
+    # Gera bloco pronto para config.py / tracker_rules.py
     print("\n" + "=" * 60)
-    print("# Cole em /etc/qbit-manager/tracker_rules.py:")
+    print("# Cole no TRACKER_RULES do seu config.py:")
     print("=" * 60)
     print("TRACKER_RULES = {")
     print("    # Tracker                                    Dias mínimos de seeding")
@@ -98,8 +94,8 @@ def get_all_trackers():
         print(f'    "{tracker}":{padding}0,  # {count} torrents')
     print("}")
     print("=" * 60)
-    print("\n⚠️  Substitua os 0 pelo número de dias mínimos de seeding de cada tracker e cole no config.py")
+    print("\n⚠️  Substitua os 0 pelo número de dias mínimos de seeding de cada tracker.")
 
 
 if __name__ == "__main__":
-    get_all_trackers()
+    gerar_lista_trackers()

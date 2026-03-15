@@ -11,7 +11,7 @@ Gerenciamento automatizado do qBittorrent via cron: monitoramento de espaço em 
 - **Force start em checking** — aplica `force_start` automaticamente em torrents em estado `checkingDL/UP/ResumeData`
 - **Gerenciamento por tracker** — garante um mínimo de downloads ativos por tracker
 - **Histórico em SQLite** — todas as execuções, snapshots de torrents, pausas e deleções registradas no banco
-- **Sistema de notificações plugável** — implemente `enviar_notificacao()` com o canal de sua preferência
+- **Notificações configuráveis** — Telegram, Discord, Slack, Ntfy, Gotify ou Pushover (tudo via `config.py`)
 - **OpenTelemetry (OTEL)** — logs estruturados enviados via OTLP/HTTP para qualquer collector
 
 ---
@@ -47,7 +47,7 @@ O sistema usa **3 diretórios** separados, cada um com uma função. Todos são 
 | Variável | Caminho padrão | O que fica aqui |
 |---|---|---|
 | `INSTALL_DIR` | `/usr/local/lib/qbit-manager` | Scripts + pasta `modulos/` (código do programa) |
-| `CONFIG_DIR`* | `/etc/qbit-manager` | `config.py`, `notificacao.py`, `tracker_rules.py` (suas configs) |
+| `CONFIG_DIR`* | `/etc/qbit-manager` | `config.py`, `tracker_rules.py` (suas configs) |
 | `DB_DIR` | `/var/lib/qbit-manager` | `qbit.db` (banco SQLite, criado automaticamente) |
 
 > *`CONFIG_DIR` é definido no topo do `qbit-manager.py` (não no config.py, pois o config.py fica dentro dele).
@@ -62,12 +62,12 @@ INSTALL_DIR (/usr/local/lib/qbit-manager/)    ← código do programa
 │   ├── ativacao.py                            ← pausa/restauração + gerenciamento de trackers
 │   ├── db.py                                  ← operações SQLite
 │   ├── helpers.py                             ← utilitários compartilhados
+│   ├── notificacao.py                         ← sistema de notificações (despacha por tipo do config)
 │   └── otel.py                                ← integração OpenTelemetry
-└── qbit-traker-list.py                        ← utilitário: gera lista de trackers
+└── qbit-traker-list.py                        ← utilitário: gera lista de trackers (usa modulos/)
 
 CONFIG_DIR (/etc/qbit-manager/)               ← configuração do usuário
-├── config.py                                  ← credenciais, discos, regras, INSTALL_DIR
-├── notificacao.py                             ← canal de notificação (opcional)
+├── config.py                                  ← credenciais, discos, notificações, INSTALL_DIR
 └── tracker_rules.py                           ← regras de seeding por tracker (opcional)
 
 DB_DIR (/var/lib/qbit-manager/)               ← dados persistentes
@@ -157,9 +157,6 @@ sudo cp qbit-traker-list.py /usr/local/lib/qbit-manager/
 sudo cp config.py /etc/qbit-manager/config.py
 sudo chmod 600 /etc/qbit-manager/config.py    # proteger credenciais
 sudo nano /etc/qbit-manager/config.py
-
-# (Opcional) Notificações — descomente o canal desejado
-sudo cp notificacao.py /etc/qbit-manager/notificacao.py
 ```
 
 ### 5. Verificar o INSTALL_DIR no config.py
@@ -221,7 +218,6 @@ copy modulos\*.py               C:\qbit-manager\modulos\
 
 # 3. Copiar configuração
 copy config.py                  C:\qbit-manager\config\config.py
-copy notificacao.py             C:\qbit-manager\config\notificacao.py
 ```
 
 Edite o `CONFIG_DIR` no topo do `qbit-manager.py`:
@@ -393,20 +389,31 @@ Após gerar, edite o `tracker_rules.py` substituindo os `0` pelos dias reais e s
 
 ## Notificações
 
-As notificações são implementadas num arquivo separado `notificacao.py`, mantendo o script principal intacto. Copie o arquivo para o diretório de configuração e descomente o canal desejado:
+As notificações são configuradas diretamente no `config.py` — basta definir o tipo e as credenciais:
 
-```bash
-sudo cp notificacao.py /etc/qbit-manager/notificacao.py
-sudo nano /etc/qbit-manager/notificacao.py
+```python
+NOTIFICACAO_TIPO = "telegram"    # ou: discord, slack, ntfy, gotify, pushover, nenhum
+NOTIFICACAO_CONFIG = {
+    "bot_token": "123456:ABC-seu-token-aqui",
+    "chat_id":   "123456789",
+}
 ```
 
-Se o arquivo não existir, o script imprime as notificações apenas no log (sem envio externo).
+O módulo `modulos/notificacao.py` lê essas variáveis e despacha para o canal correto. Não é necessário criar nenhum arquivo separado.
 
-A função deve se chamar `enviar_notificacao()` e aceitar os parâmetros:
-- `titulo` (str) — título da notificação
-- `mensagem` (str) — corpo da mensagem
-- `priority` (int) — `0` = informativo, `1` = crítico
-- `event_type` (str) — tipo do evento, útil para rotear ou formatar por canal
+### Tipos e credenciais
+
+| Tipo | Credenciais no `NOTIFICACAO_CONFIG` | Como obter |
+|---|---|---|
+| `telegram` | `bot_token`, `chat_id` | Crie bot via [@BotFather](https://t.me/BotFather), `chat_id` via `/getUpdates` |
+| `discord` | `webhook_url` | Configurações do Servidor → Integrações → Webhooks |
+| `slack` | `webhook_url` | [api.slack.com/apps](https://api.slack.com/apps) → Incoming Webhooks |
+| `ntfy` | `url`, `token` (opcional) | [ntfy.sh](https://ntfy.sh) ou self-hosted |
+| `gotify` | `url`, `token` | [gotify.net](https://gotify.net) — painel → Application → Token |
+| `pushover` | `app_token`, `user_key` | [pushover.net](https://pushover.net) |
+| `nenhum` | — | Desativa notificações |
+
+Todos os exemplos com credenciais estão comentados no `config.py`.
 
 ### Mensagens enviadas
 
@@ -415,119 +422,6 @@ A função deve se chamar `enviar_notificacao()` e aceitar os parâmetros:
 | `paused` | `Torrents Status` | `Downloads Pausados` | 1x por ocorrência |
 | `restored` | `Torrents Status` | `Download em andamento` | Sempre |
 | `waiting_paused` | `Downloads Ainda Pausados` | `Verificar sistema.` | A cada 60 min |
-
----
-
-### Telegram
-
-Crie um bot via [@BotFather](https://t.me/BotFather) e obtenha o `BOT_TOKEN`. Para obter o `CHAT_ID`, envie uma mensagem ao bot e acesse `https://api.telegram.org/bot<TOKEN>/getUpdates`.
-
-```python
-def enviar_notificacao(titulo, mensagem, priority=0, event_type=None):
-    import requests
-    BOT_TOKEN = "123456:ABC-seu-token-aqui"
-    CHAT_ID   = "123456789"
-
-    requests.post(
-        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-        json={
-            "chat_id":    CHAT_ID,
-            "text":       f"*{titulo}*\n\n{mensagem}",
-            "parse_mode": "Markdown"
-        }
-    )
-```
-
----
-
-### Discord
-
-Crie um Webhook em **Configurações do Servidor → Integrações → Webhooks**.
-
-```python
-def enviar_notificacao(titulo, mensagem, priority=0, event_type=None):
-    import requests
-    WEBHOOK_URL = "https://discord.com/api/webhooks/SEU_WEBHOOK_AQUI"
-
-    cor = {0: 0x2ecc71, 1: 0xe74c3c}.get(priority, 0xf39c12)
-
-    requests.post(WEBHOOK_URL, json={
-        "embeds": [{
-            "title":       titulo,
-            "description": mensagem,
-            "color":       cor
-        }]
-    })
-```
-
----
-
-### Slack
-
-Crie um app em [api.slack.com/apps](https://api.slack.com/apps), ative **Incoming Webhooks** e copie a URL gerada.
-
-```python
-def enviar_notificacao(titulo, mensagem, priority=0, event_type=None):
-    import requests
-    WEBHOOK_URL = "https://hooks.slack.com/services/SEU/WEBHOOK/AQUI"
-
-    requests.post(WEBHOOK_URL, json={
-        "text": f"*{titulo}*\n{mensagem}"
-    })
-```
-
----
-
-### Ntfy
-
-[Ntfy](https://ntfy.sh) é uma solução self-hosted ou pública, sem necessidade de criar conta para uso básico.
-
-```python
-def enviar_notificacao(titulo, mensagem, priority=0, event_type=None):
-    import requests
-    NTFY_URL   = "https://ntfy.sh/seu-topico-aqui"
-    PRIORIDADE = {0: "default", 1: "high"}.get(priority, "default")
-
-    requests.post(NTFY_URL, data=mensagem.encode("utf-8"), headers={
-        "Title":    titulo,
-        "Priority": PRIORIDADE
-    })
-```
-
----
-
-### Gotify
-
-[Gotify](https://gotify.net) é uma alternativa self-hosted popular em homelabs.
-
-```python
-def enviar_notificacao(titulo, mensagem, priority=0, event_type=None):
-    import requests
-    GOTIFY_URL   = "https://gotify.seu-servidor.com"
-    GOTIFY_TOKEN = "seu-app-token-aqui"
-
-    requests.post(f"{GOTIFY_URL}/message", json={
-        "title":    titulo,
-        "message":  mensagem,
-        "priority": priority
-    }, headers={"X-Gotify-Key": GOTIFY_TOKEN})
-```
-
----
-
-### Pushover
-
-```python
-def enviar_notificacao(titulo, mensagem, priority=0, event_type=None):
-    import requests
-    requests.post("https://api.pushover.net/1/messages.json", data={
-        "token":    "seu-app-token",
-        "user":     "sua-user-key",
-        "title":    titulo,
-        "message":  mensagem,
-        "priority": priority
-    })
-```
 
 ---
 

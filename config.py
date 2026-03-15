@@ -26,9 +26,69 @@ QB_PASS = "sua_senha_aqui"
 
 # -----------------------------------------------------------------------------
 # Notificações
-# Implemente enviar_notificacao() no script principal com o canal de sua preferência.
-# Exemplos: Telegram, Discord webhook, Slack, e-mail, Gotify, Ntfy, etc.
 # -----------------------------------------------------------------------------
+# Escolha o tipo de notificação e preencha as credenciais.
+# Tipos disponíveis: "telegram", "discord", "slack", "ntfy", "gotify", "pushover", "nenhum"
+#
+# Para desativar notificações, use:
+#   NOTIFICACAO_TIPO = "nenhum"
+
+NOTIFICACAO_TIPO = "nenhum"
+NOTIFICACAO_CONFIG = {}
+
+# ── Telegram ──────────────────────────────────────────────────────────────────
+# Crie um bot via @BotFather e obtenha o BOT_TOKEN.
+# Para obter o CHAT_ID: envie uma mensagem ao bot e acesse
+# https://api.telegram.org/bot<TOKEN>/getUpdates
+#
+# NOTIFICACAO_TIPO = "telegram"
+# NOTIFICACAO_CONFIG = {
+#     "bot_token": "123456:ABC-seu-token-aqui",
+#     "chat_id":   "123456789",
+# }
+
+# ── Discord ───────────────────────────────────────────────────────────────────
+# Crie um Webhook em: Configurações do Servidor → Integrações → Webhooks
+#
+# NOTIFICACAO_TIPO = "discord"
+# NOTIFICACAO_CONFIG = {
+#     "webhook_url": "https://discord.com/api/webhooks/SEU_WEBHOOK_AQUI",
+# }
+
+# ── Slack ─────────────────────────────────────────────────────────────────────
+# Crie um app em api.slack.com/apps, ative Incoming Webhooks e copie a URL.
+#
+# NOTIFICACAO_TIPO = "slack"
+# NOTIFICACAO_CONFIG = {
+#     "webhook_url": "https://hooks.slack.com/services/SEU/WEBHOOK/AQUI",
+# }
+
+# ── Ntfy ──────────────────────────────────────────────────────────────────────
+# Self-hosted ou público (ntfy.sh). Token é opcional.
+#
+# NOTIFICACAO_TIPO = "ntfy"
+# NOTIFICACAO_CONFIG = {
+#     "url":   "https://ntfy.sh/seu-topico-aqui",
+#     "token": "",   # opcional — deixe vazio se não usar autenticação
+# }
+
+# ── Gotify ────────────────────────────────────────────────────────────────────
+# Self-hosted. Crie um Application no painel e copie o token.
+#
+# NOTIFICACAO_TIPO = "gotify"
+# NOTIFICACAO_CONFIG = {
+#     "url":   "https://gotify.seu-servidor.com",
+#     "token": "seu-app-token-aqui",
+# }
+
+# ── Pushover ──────────────────────────────────────────────────────────────────
+# Crie uma Application em pushover.net e copie o token.
+#
+# NOTIFICACAO_TIPO = "pushover"
+# NOTIFICACAO_CONFIG = {
+#     "app_token": "seu-app-token",
+#     "user_key":  "sua-user-key",
+# }
 
 # -----------------------------------------------------------------------------
 # Gerenciamento de trackers (mínimo de downloads ativos por tracker)
@@ -80,3 +140,11 @@ TRACKER_RULES = {
     "privatetorrent.net":     90,
     "anotherprivate.org":    120,
 }
+
+# -----------------------------------------------------------------------------
+# OpenTelemetry (opcional)
+# Para enviar logs estruturados a um OTEL Collector, descomente abaixo:
+# -----------------------------------------------------------------------------
+# OTEL_ENDPOINT     = "http://localhost:4318"
+# OTEL_SERVICE_NAME = "qbit-manager"
+# OTEL_ENABLED      = True
