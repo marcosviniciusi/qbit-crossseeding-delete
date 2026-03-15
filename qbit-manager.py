@@ -83,7 +83,7 @@ except NameError:
 
 # ── 5. Importar modulos internos (de INSTALL_DIR/modulos/) ──────────────────
 from modulos.db import init_db
-from modulos.otel import configurar_otel
+from modulos.otel import configurar_otel, flush as otel_flush
 from modulos.checagem_disco import executar_checagem
 from modulos.notificacao import criar_notificador
 
@@ -152,6 +152,9 @@ def main():
         min_torrents_per_tracker=MIN_TORRENTS_PER_TRACKER,
         enviar_notificacao_fn=enviar_notificacao,
     )
+
+    # Enviar log completo para o OTEL (um unico registro com tudo)
+    otel_flush()
 
     print(f"🗄️  {DB_PATH}")
     print("=" * 70)
