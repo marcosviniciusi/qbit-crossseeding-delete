@@ -138,8 +138,8 @@ def log_run(run_id, status, resumo):
 
 def flush():
     """
-    Envia todos os logs acumulados como um unico registro para o OTEL Collector.
-    O body contem o log completo do run em formato estruturado.
+    Envia todos os logs acumulados como logRecords individuais para o OTEL Collector.
+    Cada entry do buffer vira um logRecord separado com seus proprios atributos.
     Limpa o buffer apos o envio.
 
     Retorna True se enviou com sucesso, False se nao.
@@ -151,36 +151,24 @@ def flush():
         _buffer.clear()
         return False
 
-    # Montar o body: log completo do run
-    linhas = []
-    all_attrs = {}
+    # Cada entry vira um logRecord individual
+    log_records = []
     for entry in _buffer:
-        prefix = f"[{entry['level'].upper()}]"
-        linhas.append(f"{prefix} {entry['msg']}")
-        # Acumular attrs unicos (ultimo valor ganha se repetir)
-        for k, v in entry["attrs"].items():
-            all_attrs[k] = v
+        severity = _SEVERITY_MAP.get(entry["level"], 9)
+        ts_ns = str(int(entry["ts"] * 1e9))
 
-    body_text = "\n".join(linhas)
-    now_ns    = int(time.time() * 1e9)
+        attributes = [
+            {"key": k, "value": {"stringValue": str(v)}}
+            for k, v in entry["attrs"].items()
+        ]
 
-    # Attributes: combinar todos os attrs + metadata
-    attributes = [
-        {"key": k, "value": {"stringValue": str(v)}}
-        for k, v in all_attrs.items()
-    ]
-    attributes.append({
-        "key": "log.entry_count",
-        "value": {"stringValue": str(len(_buffer))}
-    })
-
-    log_record = {
-        "timeUnixNano":   str(now_ns),
-        "severityNumber": _max_severity["number"],
-        "severityText":   _max_severity["level"].upper(),
-        "body":           {"stringValue": body_text},
-        "attributes":     attributes,
-    }
+        log_records.append({
+            "timeUnixNano":   ts_ns,
+            "severityNumber": severity,
+            "severityText":   entry["level"].upper(),
+            "body":           {"stringValue": entry["msg"]},
+            "attributes":     attributes,
+        })
 
     payload = {
         "resourceLogs": [{
@@ -194,7 +182,7 @@ def flush():
             },
             "scopeLogs": [{
                 "scope": {"name": "qbit-manager"},
-                "logRecords": [log_record],
+                "logRecords": log_records,
             }]
         }]
     }
