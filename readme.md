@@ -63,8 +63,8 @@ INSTALL_DIR (/usr/local/lib/qbit-manager/)    ← código do programa
 │   ├── db.py                                  ← operações SQLite
 │   ├── helpers.py                             ← utilitários compartilhados
 │   ├── notificacao.py                         ← sistema de notificações (despacha por tipo do config)
-│   └── otel.py                                ← integração OpenTelemetry
-└── qbit-traker-list.py                        ← utilitário: gera lista de trackers (usa modulos/)
+│   ├── otel.py                                ← integração OpenTelemetry (buffer + flush)
+│   └── tracker_list.py                        ← gerador de lista de trackers
 
 CONFIG_DIR (/etc/qbit-manager/)               ← configuração do usuário
 ├── config.py                                  ← credenciais, discos, notificações, INSTALL_DIR
@@ -86,7 +86,8 @@ qbit-manager.py (entry point)
         ├── ativacao.executar_pausa()              ← chamado quando precisa pausar
         ├── ativacao.executar_restauracao()         ← chamado quando pode restaurar
         ├── ativacao.gerenciar_trackers()           ← chamado quando sistema ativo
-        └── otel.log_*()                           ← logs enviados ao OTEL em cada etapa
+        ├── otel.log_*()                           ← acumula logs no buffer
+        └── otel.flush()                           ← envia tudo pro OTEL em bloco unico
 ```
 
 ---
@@ -145,9 +146,6 @@ sudo chmod +x /usr/local/lib/qbit-manager/qbit-manager.py
 
 # Módulos internos (DEVEM ficar dentro de INSTALL_DIR/modulos/)
 sudo cp modulos/*.py /usr/local/lib/qbit-manager/modulos/
-
-# Utilitário de lista de trackers
-sudo cp qbit-traker-list.py /usr/local/lib/qbit-manager/
 ```
 
 ### 4. Copiar configuração para CONFIG_DIR
@@ -172,11 +170,10 @@ INSTALL_DIR = "/usr/local/lib/qbit-manager"
 # INSTALL_DIR = "/home/usuario/qbit-manager"
 ```
 
-### 6. (Opcional) Criar atalhos
+### 6. (Opcional) Criar atalho
 
 ```bash
 sudo ln -sf /usr/local/lib/qbit-manager/qbit-manager.py /usr/local/bin/qbit-manager
-sudo ln -sf /usr/local/lib/qbit-manager/qbit-traker-list.py /usr/local/bin/qbit-traker-list
 ```
 
 ### 7. Agendar no cron
@@ -346,22 +343,21 @@ Se não configurar, o sistema funciona normalmente sem OTEL — os logs vão ape
 
 ## Gerando a lista de trackers
 
-O script `qbit-traker-list.py` conecta ao qBittorrent, varre todos os torrents e gera automaticamente o bloco `TRACKER_RULES` pronto para colar no `tracker_rules.py`.
+Use o `--tracker-list` para varrer todos os torrents e gerar o bloco `TRACKER_RULES` pronto para colar no `config.py`:
 
 ```bash
-python3 /usr/local/lib/qbit-manager/qbit-traker-list.py
-# ou, se criou o link simbólico:
-qbit-traker-list
-```
+python3 /usr/local/lib/qbit-manager/qbit-manager.py --tracker-list
 
-O script lê as credenciais do mesmo `config.py` usado pelo gerenciador principal.
+# ou, se criou o link simbólico:
+qbit-manager --tracker-list
+```
 
 ### Saída
 
 ```
-✅ Configurações carregadas de /etc/qbit-manager/config.py
+🔍 Gerando lista de trackers...
+============================================================
 ✅ Conectado ao qBittorrent
-
 📦 Total de torrents: 843
 
 TRACKER                                            TORRENTS
@@ -371,7 +367,7 @@ tracker2.example.com                                    289
 privatehd.example.com                                   150
 
 ============================================================
-# Cole em /etc/qbit-manager/tracker_rules.py:
+# Cole no TRACKER_RULES do seu config.py:
 ============================================================
 TRACKER_RULES = {
     "tracker1.example.com":                      0,  # 312 torrents
@@ -383,7 +379,7 @@ TRACKER_RULES = {
 ⚠️  Substitua os 0 pelo número de dias mínimos de seeding de cada tracker.
 ```
 
-Após gerar, edite o `tracker_rules.py` substituindo os `0` pelos dias reais e salve em `/etc/qbit-manager/tracker_rules.py`.
+Substitua os `0` pelos dias reais e cole no `TRACKER_RULES` do seu `config.py`.
 
 ---
 

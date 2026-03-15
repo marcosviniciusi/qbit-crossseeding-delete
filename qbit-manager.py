@@ -86,6 +86,7 @@ from modulos.db import init_db
 from modulos.otel import configurar_otel, flush as otel_flush
 from modulos.checagem_disco import executar_checagem
 from modulos.notificacao import criar_notificador
+from modulos.tracker_list import gerar_lista_trackers
 
 # ── 6. Criar notificador a partir do config ─────────────────────────────────
 try:
@@ -100,7 +101,33 @@ except NameError:
 enviar_notificacao = criar_notificador(_notif_tipo, _notif_config)
 
 
+def _conectar_qbittorrent():
+    """Conecta ao qBittorrent e retorna o client autenticado."""
+    client = qbittorrentapi.Client(host=QB_URL, username=QB_USER, password=QB_PASS)
+    try:
+        client.auth_log_in()
+        print("✅ Conectado ao qBittorrent")
+        return client
+    except qbittorrentapi.LoginFailed:
+        print("❌ Falha ao autenticar")
+        enviar_notificacao("❌ qBittorrent - Erro de Autenticação", f"Falha em {QB_URL}", priority=1)
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Erro ao conectar: {e}")
+        enviar_notificacao("❌ qBittorrent - Erro de Conexão", f"{QB_URL}\n\n{e}", priority=1)
+        sys.exit(1)
+
+
 def main():
+    # ── Verificar se eh subcomando ────────────────────────────────────────
+    if len(sys.argv) > 1 and sys.argv[1] == "--tracker-list":
+        print("🔍 Gerando lista de trackers...")
+        print("=" * 60)
+        client = _conectar_qbittorrent()
+        gerar_lista_trackers(client)
+        return
+
+    # ── Fluxo principal ──────────────────────────────────────────────────
     print("🚀 qBittorrent Manager (Modular)")
     print("=" * 70)
 
@@ -109,7 +136,6 @@ def main():
     otel_service  = getattr(sys.modules.get('config'), 'OTEL_SERVICE_NAME', 'qbit-manager')
     otel_enabled  = getattr(sys.modules.get('config'), 'OTEL_ENABLED', False)
 
-    # Tambem aceita variaveis globais importadas via `from config import *`
     if otel_endpoint is None:
         otel_endpoint = globals().get('OTEL_ENDPOINT')
     if otel_enabled is False:
@@ -126,20 +152,7 @@ def main():
     print(f"✅ Banco: {DB_PATH}")
 
     # Conectar ao qBittorrent
-    client = qbittorrentapi.Client(host=QB_URL, username=QB_USER, password=QB_PASS)
-    try:
-        client.auth_log_in()
-        print("✅ Conectado ao qBittorrent")
-    except qbittorrentapi.LoginFailed:
-        print("❌ Falha ao autenticar")
-        enviar_notificacao("❌ qBittorrent - Erro de Autenticação", f"Falha em {QB_URL}", priority=1)
-        conn.close()
-        sys.exit(1)
-    except Exception as e:
-        print(f"❌ Erro ao conectar: {e}")
-        enviar_notificacao("❌ qBittorrent - Erro de Conexão", f"{QB_URL}\n\n{e}", priority=1)
-        conn.close()
-        sys.exit(1)
+    client = _conectar_qbittorrent()
 
     # Executar checagem de disco (orquestrador principal)
     run_id = executar_checagem(

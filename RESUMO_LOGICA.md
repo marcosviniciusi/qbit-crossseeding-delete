@@ -74,23 +74,26 @@
 
 ```
 qbit-manager-python/
-├── qbit-manager.py          # Entry point simplificado
-├── config.py                # Configuracoes (sem alteracao)
-├── notificacao.py           # Canais de notificacao (sem alteracao)
+├── qbit-manager.py          # Entry point (aceita --tracker-list)
+├── config.py                # Template de configuracoes
 ├── modulos/
 │   ├── __init__.py
 │   ├── db.py                # Banco de dados (init, CRUD, queries)
 │   ├── helpers.py           # Utilitarios compartilhados
-│   ├── otel.py              # OpenTelemetry logging
+│   ├── otel.py              # OpenTelemetry logging (buffer + flush)
+│   ├── notificacao.py       # Notificacoes (despacha por tipo do config)
 │   ├── limpeza.py           # Seed cleaner (chamado pela checagem)
 │   ├── ativacao.py          # Ativacao de downloads + gerenciamento de trackers
-│   └── checagem_disco.py    # Orquestrador: checagem de disco -> limpeza -> ativacao
+│   ├── checagem_disco.py    # Orquestrador: checagem de disco -> limpeza -> ativacao
+│   └── tracker_list.py      # Gerador de lista de trackers
 ```
 
 ### Responsabilidades:
 - **checagem_disco.py**: verifica espacos, decide estado, chama limpeza e ativacao
 - **limpeza.py**: seed cleaner completo (cross-seed, dry_run, delecao)
 - **ativacao.py**: restauracao de downloads, gerenciamento de trackers, force start
-- **otel.py**: wrapper para enviar logs/metricas ao OpenTelemetry Collector
+- **notificacao.py**: le NOTIFICACAO_TIPO do config e despacha (telegram, discord, etc)
+- **otel.py**: acumula logs durante o run e envia em bloco unico via OTLP/HTTP
+- **tracker_list.py**: varre torrents e gera bloco TRACKER_RULES pro config.py
 - **db.py**: todas as operacoes de banco (init, criar_run, salvar_snapshots, etc)
-- **helpers.py**: verificar_espacos, extrair_dominio, construir_tracker_map, notificacoes
+- **helpers.py**: verificar_espacos, extrair_dominio, construir_tracker_map
