@@ -178,7 +178,12 @@ def executar_checagem(client, conn, paths_config, tracker_rules,
                 notificar_se_necessario(conn, run_id, 'waiting_paused', enviar_notificacao_fn)
 
             else:
-                print(f"\n   ⏳ Disco normalizado mas checking/moving ainda ativo — aguardando...")
+                if not todos_ok:
+                    print(f"\n   ⏳ Disco(s) ainda abaixo do limite máximo — aguardando...")
+                elif not checking_moving_zero:
+                    print(f"\n   ⏳ Disco normalizado mas checking/moving ainda ativo ({checking_moving_total}) — aguardando...")
+                else:
+                    print(f"\n   ⏳ Condições ainda não satisfeitas — aguardando...")
                 registrar_pause_event(conn, run_id, 'waiting',
                                       espacos=espacos,
                                       hashes=ultimo_estado["torrents_pausados"],

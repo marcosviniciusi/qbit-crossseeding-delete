@@ -18,6 +18,7 @@
 
 import os
 import sys
+import importlib
 import argparse
 
 
@@ -76,6 +77,9 @@ def _carregar_config(config_dir):
 
     cfg = {}
     try:
+        # Forçar reload caso config já esteja cacheado com outro path
+        if "config" in sys.modules:
+            del sys.modules["config"]
         import config as _cfg_mod
         for attr in dir(_cfg_mod):
             if not attr.startswith("_"):
@@ -174,7 +178,7 @@ def cmd_check_config(cfg, config_dir):
     print(f"   Pass: {'*' * len(cfg['QB_PASS'])}")
     if cfg["QB_URL"] in ("https://torrent.exemplo.com", "http://torrent.seudominio.com:PORTA"):
         erros.append("QB_URL está com valor de exemplo — ajuste para o endereço real")
-    if cfg["QB_PASS"] == "sua_senha_aqui":
+    if cfg["QB_PASS"] in ("sua_senha_aqui", "senha"):
         erros.append("QB_PASS está com valor de exemplo — ajuste para a senha real")
     print()
 
@@ -288,6 +292,7 @@ def cmd_check_torrent(cfg):
 
     # Forçar dry_run e criar espacos "criticos" pra forçar a execução do seed cleaner
     from modulos.helpers import verificar_espacos
+    from modulos.db import criar_run
     espacos = verificar_espacos(cfg["PATHS"])
 
     # Forçar seed_cleaner discos como criticos para listar elegíveis
@@ -297,7 +302,7 @@ def cmd_check_torrent(cfg):
         if d["seed_cleaner"]:
             espacos_forcar[nome]["critico"] = True
 
-    run_id = 0  # não salva no banco de verdade em check
+    run_id = criar_run(conn, "manual_check", 0, 0, espacos)
     executar_seed_cleaner(client, conn, run_id, espacos_forcar,
                           cfg["TRACKER_RULES"], dry_run=True)
     conn.close()

@@ -11,7 +11,10 @@
 #       "chat_id":   "123456789",
 #   }
 
-import requests
+try:
+    import requests
+except ImportError:
+    requests = None
 
 
 def _enviar_telegram(titulo, mensagem, priority, event_type, config):
@@ -98,6 +101,13 @@ def criar_notificador(tipo, config):
         enviar("Titulo", "Mensagem", priority=1, event_type="paused")
     """
     if not tipo or tipo == "nenhum":
+        def _noop(titulo, mensagem, priority=0, event_type=None):
+            pass
+        return _noop
+
+    if not requests:
+        print(f"⚠️  Módulo 'requests' não instalado — notificações desativadas")
+        print(f"   Instale com: pip install requests")
         def _noop(titulo, mensagem, priority=0, event_type=None):
             pass
         return _noop
