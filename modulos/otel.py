@@ -7,6 +7,7 @@
 # Configuracao no config.py:
 #   OTEL_ENDPOINT     = "http://localhost:4318"
 #   OTEL_SERVICE_NAME = "qbit-manager"
+#   OTEL_ENVIRONMENT  = "production"
 #   OTEL_ENABLED      = True
 
 import json
@@ -21,6 +22,7 @@ except ImportError:
 _config = {
     "endpoint":     None,
     "service_name": "qbit-manager",
+    "environment":  "production",
     "enabled":      False,
 }
 
@@ -38,11 +40,13 @@ _SEVERITY_MAP = {
 }
 
 
-def configurar_otel(endpoint=None, service_name=None, enabled=None):
+def configurar_otel(endpoint=None, service_name=None, environment=None, enabled=None):
     if endpoint is not None:
         _config["endpoint"] = endpoint.rstrip("/")
     if service_name is not None:
         _config["service_name"] = service_name
+    if environment is not None:
+        _config["environment"] = environment
     if enabled is not None:
         _config["enabled"] = enabled
     # Limpar buffer a cada configuracao (novo run)
@@ -183,7 +187,9 @@ def flush():
             "resource": {
                 "attributes": [
                     {"key": "service.name",
-                     "value": {"stringValue": _config["service_name"]}}
+                     "value": {"stringValue": _config["service_name"]}},
+                    {"key": "deployment.environment",
+                     "value": {"stringValue": _config["environment"]}}
                 ]
             },
             "scopeLogs": [{

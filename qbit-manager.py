@@ -102,6 +102,7 @@ def _carregar_config(config_dir):
     cfg.setdefault("NOTIFICACAO_CONFIG",        {})
     cfg.setdefault("OTEL_ENDPOINT",             None)
     cfg.setdefault("OTEL_SERVICE_NAME",         "qbit-manager")
+    cfg.setdefault("OTEL_ENVIRONMENT",          "production")
     cfg.setdefault("OTEL_ENABLED",              False)
     cfg.setdefault("PATHS", {
         "p2p": {
@@ -227,9 +228,10 @@ def cmd_check_config(cfg, config_dir):
 
     # OTEL
     print("── OpenTelemetry ──")
-    print(f"   Enabled:  {cfg['OTEL_ENABLED']}")
-    print(f"   Endpoint: {cfg['OTEL_ENDPOINT'] or '(não configurado)'}")
-    print(f"   Service:  {cfg['OTEL_SERVICE_NAME']}")
+    print(f"   Enabled:     {cfg['OTEL_ENABLED']}")
+    print(f"   Endpoint:    {cfg['OTEL_ENDPOINT'] or '(não configurado)'}")
+    print(f"   Service:     {cfg['OTEL_SERVICE_NAME']}")
+    print(f"   Environment: {cfg['OTEL_ENVIRONMENT']}")
     print()
 
     # Modulos
@@ -399,6 +401,7 @@ def cmd_check_send_log(cfg):
     configurar_otel(
         endpoint=cfg["OTEL_ENDPOINT"],
         service_name=cfg["OTEL_SERVICE_NAME"],
+        environment=cfg["OTEL_ENVIRONMENT"],
         enabled=True,
     )
 
@@ -473,6 +476,7 @@ def main():
     configurar_otel(
         endpoint=cfg["OTEL_ENDPOINT"],
         service_name=cfg["OTEL_SERVICE_NAME"],
+        environment=cfg["OTEL_ENVIRONMENT"],
         enabled=cfg["OTEL_ENABLED"],
     )
 

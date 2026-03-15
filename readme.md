@@ -387,6 +387,7 @@ Para enviar logs estruturados a um OTEL Collector, adicione ao `config.py`:
 ```python
 OTEL_ENDPOINT     = "http://localhost:4318"   # endpoint OTLP/HTTP do collector
 OTEL_SERVICE_NAME = "qbit-manager"            # nome do serviço nos logs
+OTEL_ENVIRONMENT  = "production"              # deployment.environment (ex: production, staging)
 OTEL_ENABLED      = True                      # ativar envio
 ```
 

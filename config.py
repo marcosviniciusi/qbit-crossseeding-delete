@@ -147,4 +147,5 @@ TRACKER_RULES = {
 # -----------------------------------------------------------------------------
 # OTEL_ENDPOINT     = "http://localhost:4318"
 # OTEL_SERVICE_NAME = "qbit-manager"
+# OTEL_ENVIRONMENT  = "production"
 # OTEL_ENABLED      = True
