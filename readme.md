@@ -11,39 +11,143 @@ Gerenciamento automatizado do qBittorrent via cron: monitoramento de espaço em 
 - **Force start em checking** — aplica `force_start` automaticamente em torrents em estado `checkingDL/UP/ResumeData`
 - **Gerenciamento por tracker** — garante um mínimo de downloads ativos por tracker
 - **Histórico em SQLite** — todas as execuções, snapshots de torrents, pausas e deleções registradas no banco
-- **Sistema de notificações plugável** — implemente `enviar_notificacao()` com o canal de sua preferência
+- **Notificações configuráveis** — Telegram, Discord, Slack, Ntfy, Gotify ou Pushover (tudo via `config.py`)
+- **OpenTelemetry (OTEL)** — logs estruturados enviados via OTLP/HTTP para qualquer collector
+
+---
+
+## Uso
+
+```bash
+# Execução normal (cron)
+python3 qbit-manager.py
+
+# Verificar espaço em disco (sem executar ações)
+python3 qbit-manager.py --check-disk
+
+# Listar torrents elegíveis para remoção (dry run)
+python3 qbit-manager.py --check-torrent
+
+# Executar seed cleaner (respeita tempo de seed e cross-seed)
+python3 qbit-manager.py --erase-torrent
+
+# Gerar bloco TRACKER_RULES a partir dos torrents atuais
+python3 qbit-manager.py --tracker-list
+
+# Testar envio de notificação
+python3 qbit-manager.py --test-notification
+
+# Testar envio de log ao OTEL Collector
+python3 qbit-manager.py --check-send-log
+
+# Validar se a configuração está correta
+python3 qbit-manager.py --check-config
+```
+
+### Flags globais
+
+```bash
+# Usar diretório de configuração diferente do padrão
+python3 qbit-manager.py --config /caminho/para/config
+
+# Usar diretório de módulos diferente do INSTALL_DIR
+python3 qbit-manager.py --modules /caminho/para/modulos
+
+# Combinar: config custom + verificar disco
+python3 qbit-manager.py --config /home/user/meu-config --check-disk
+```
+
+| Flag | Padrão | O que faz |
+|---|---|---|
+| `--config PATH` | `/etc/qbit-manager` | Diretório onde fica o `config.py` |
+| `--modules PATH` | `INSTALL_DIR` do config | Diretório onde ficam os scripts + `modulos/` |
+
+---
+
+## Como funciona
+
+```
+Disco crítico? (espaço livre <= limite_min)
+  │
+  ├── SIM → executa seed cleaner (limpeza)
+  │          ├── Resolveu? → sistema ativo → gerenciar trackers
+  │          └── Não resolveu? → pausa downloads → notifica
+  │
+  └── NÃO → sistema ativo → gerenciar trackers
+
+Se já estava pausado na execução anterior:
+  │
+  ├── Todos discos OK (>= limite_max) E checking/moving = 0?
+  │     → restaura downloads → notifica → gerenciar trackers
+  │
+  └── Ainda não OK?
+        ├── Disco p2p crítico? → tenta seed cleaner → reavalia
+        ├── Disco destino crítico? → aguarda Radarr/Sonarr
+        └── Disco OK mas checking/moving ativo? → aguarda
+```
+
+---
+
+## Diretórios — onde cada coisa fica
+
+O sistema usa **3 diretórios** separados, cada um com uma função. Todos são configuráveis via `config.py`:
+
+| Variável | Caminho padrão | O que fica aqui |
+|---|---|---|
+| `INSTALL_DIR` | `/usr/local/lib/qbit-manager` | Scripts + pasta `modulos/` (código do programa) |
+| `CONFIG_DIR`* | `/etc/qbit-manager` | `config.py`, `tracker_rules.py` (suas configs) |
+| `DB_DIR` | `/var/lib/qbit-manager` | `qbit.db` (banco SQLite, criado automaticamente) |
+
+> *`CONFIG_DIR` é definido no topo do `qbit-manager.py` (não no config.py, pois o config.py fica dentro dele).
+
+```
+INSTALL_DIR (/usr/local/lib/qbit-manager/)    ← código do programa
+├── qbit-manager.py                            ← entry point (o que o cron executa)
+├── modulos/                                   ← módulos internos (DEVEM estar junto do script)
+│   ├── __init__.py
+│   ├── checagem_disco.py                      ← orquestrador (disco → limpeza → ativação)
+│   ├── limpeza.py                             ← seed cleaner
+│   ├── ativacao.py                            ← pausa/restauração + gerenciamento de trackers
+│   ├── db.py                                  ← operações SQLite
+│   ├── helpers.py                             ← utilitários compartilhados
+│   ├── notificacao.py                         ← sistema de notificações (despacha por tipo do config)
+│   ├── otel.py                                ← integração OpenTelemetry (buffer + flush)
+│   └── tracker_list.py                        ← gerador de lista de trackers
+
+CONFIG_DIR (/etc/qbit-manager/)               ← configuração do usuário
+├── config.py                                  ← credenciais, discos, notificações, INSTALL_DIR
+└── tracker_rules.py                           ← regras de seeding por tracker (opcional)
+
+DB_DIR (/var/lib/qbit-manager/)               ← dados persistentes
+└── qbit.db                                    ← banco SQLite (criado automaticamente)
+```
+
+**Importante:** a pasta `modulos/` **deve estar dentro do `INSTALL_DIR`**, no mesmo diretório do `qbit-manager.py`. O script usa `INSTALL_DIR` do `config.py` para encontrar os módulos. Se você instalar em outro lugar que não o padrão, basta alterar `INSTALL_DIR` no `config.py`.
+
+### Fluxo de chamadas entre módulos
+
+```
+qbit-manager.py (entry point)
+  └── checagem_disco.executar_checagem()         ← orquestrador
+        ├── helpers.verificar_espacos()           ← checa disco
+        ├── limpeza.executar_seed_cleaner()        ← chamado quando disco crítico
+        ├── ativacao.executar_pausa()              ← chamado quando precisa pausar
+        ├── ativacao.executar_restauracao()         ← chamado quando pode restaurar
+        ├── ativacao.gerenciar_trackers()           ← chamado quando sistema ativo
+        ├── otel.log_*()                           ← acumula logs no buffer
+        └── otel.flush()                           ← envia tudo pro OTEL em bloco unico
+```
 
 ---
 
 ## Requisitos
-
-### Python
 
 ```
 Python 3.8+
 qbittorrent-api
 ```
 
-### Linux
-
-```bash
-# Ubuntu/Debian
-sudo apt install python3 python3-pip
-
-pip install qbittorrent-api
-```
-
-### Windows
-
-1. Instale o Python em [python.org/downloads](https://www.python.org/downloads/)
-   - Marque **"Add Python to PATH"** durante a instalação
-2. Abra o terminal (cmd ou PowerShell) e instale a dependência:
-
-```powershell
-pip install qbittorrent-api
-```
-
-> O SQLite já vem embutido no Python — nenhuma instalação adicional necessária.
+> O SQLite e o `requests` já vêm incluídos no Python.
 
 ---
 
@@ -55,59 +159,154 @@ Antes de usar o script, ajuste as opções do qBittorrent em **Tools → Options
 |---|---|---|
 | **Maximum active downloads** | `0` | Desabilita o limite interno — o script assume o controle total dos downloads |
 
-Com `Maximum active downloads > 0`, o qBittorrent pode bloquear ou liberar downloads independentemente do script, causando comportamento inesperado.
-
 > **Tools → Options → BitTorrent → Torrent Queueing → Maximum active downloads → `0`**
 
 ---
 
-## Instalação
+## Instalação — Linux
 
-### Linux
+### 1. Instalar dependências
 
 ```bash
-# 1. Criar diretórios
+sudo apt install python3 python3-pip    # Ubuntu/Debian
+pip install qbittorrent-api
+```
+
+### 2. Criar os 3 diretórios
+
+```bash
+# INSTALL_DIR — onde ficam os scripts e módulos
+sudo mkdir -p /usr/local/lib/qbit-manager/modulos
+
+# CONFIG_DIR — onde fica a configuração do usuário
 sudo mkdir -p /etc/qbit-manager
+
+# DB_DIR — onde fica o banco de dados (criado automaticamente, mas garantir permissão)
 sudo mkdir -p /var/lib/qbit-manager
+```
 
-# 2. Copiar os scripts
-sudo cp qbit-manager.py         /usr/local/bin/qbit-manager.py
-sudo cp qbit-tracker-list.py    /usr/local/bin/qbit-tracker-list.py
-sudo chmod +x /usr/local/bin/qbit-manager.py
-sudo chmod +x /usr/local/bin/qbit-tracker-list.py
+### 3. Copiar scripts + módulos para INSTALL_DIR
 
-# 3. Configurar
+```bash
+# Script principal
+sudo cp qbit-manager.py /usr/local/lib/qbit-manager/
+sudo chmod +x /usr/local/lib/qbit-manager/qbit-manager.py
+
+# Módulos internos (DEVEM ficar dentro de INSTALL_DIR/modulos/)
+sudo cp modulos/*.py /usr/local/lib/qbit-manager/modulos/
+```
+
+### 4. Copiar configuração para CONFIG_DIR
+
+```bash
+# Template de configuração — edite com seus dados reais
 sudo cp config.py /etc/qbit-manager/config.py
-sudo chmod 600 /etc/qbit-manager/config.py   # proteger credenciais
-
-# 4. Editar configurações
+sudo chmod 600 /etc/qbit-manager/config.py    # proteger credenciais
 sudo nano /etc/qbit-manager/config.py
 ```
 
-### Windows
+### 5. Verificar o INSTALL_DIR no config.py
+
+Abra `/etc/qbit-manager/config.py` e confirme que `INSTALL_DIR` aponta para onde você colocou os scripts:
+
+```python
+# Se instalou no local padrão, não precisa mudar nada:
+INSTALL_DIR = "/usr/local/lib/qbit-manager"
+
+# Se instalou em outro lugar, ajuste:
+# INSTALL_DIR = "/opt/qbit-manager"
+# INSTALL_DIR = "/home/usuario/qbit-manager"
+```
+
+### 6. (Opcional) Criar atalho
+
+```bash
+sudo ln -sf /usr/local/lib/qbit-manager/qbit-manager.py /usr/local/bin/qbit-manager
+```
+
+### 7. Agendar no cron
+
+```bash
+sudo crontab -e
+```
+
+```cron
+# Executa a cada 5 minutos
+*/5 * * * * python3 /usr/local/lib/qbit-manager/qbit-manager.py >/dev/null 2>&1
+```
+
+### Instalou em outro local?
+
+Duas opções:
+
+**Opção 1** — Alterar `INSTALL_DIR` no `config.py`:
+```python
+INSTALL_DIR = "/opt/qbit-manager"
+```
+
+**Opção 2** — Usar flags na linha de comando (sem alterar nenhum arquivo):
+```bash
+python3 /opt/qbit-manager/qbit-manager.py --config /meu/config --modules /opt/qbit-manager
+```
+
+---
+
+## Instalação — Windows
 
 ```powershell
 # 1. Criar diretórios
-mkdir C:\qbit-manager\config
-mkdir C:\qbit-manager\db
+mkdir C:\qbit-manager              # INSTALL_DIR (scripts + modulos)
+mkdir C:\qbit-manager\modulos      # módulos internos
+mkdir C:\qbit-manager\config       # CONFIG_DIR (configuração)
+mkdir C:\qbit-manager\db           # DB_DIR (banco de dados)
 
-# 2. Copiar arquivos
-copy qbit-manager.py         C:\qbit-manager\
-copy qbit-tracker-list.py    C:\qbit-manager\
-copy config.py               C:\qbit-manager\config\config.py
+# 2. Copiar scripts + módulos
+copy qbit-manager.py           C:\qbit-manager\
+copy modulos\*.py               C:\qbit-manager\modulos\
+
+# 3. Copiar configuração
+copy config.py                  C:\qbit-manager\config\config.py
 ```
 
-Edite o `config.py` e ajuste o `CONFIG_DIR` no topo de cada script:
+Edite o `config.py` com os caminhos do Windows:
 
 ```python
-CONFIG_DIR = r"C:\qbit-manager\config"
+INSTALL_DIR = r"C:\qbit-manager"
+DB_DIR      = r"C:\qbit-manager\db"
+DB_PATH     = f"{DB_DIR}\\qbit.db"
 ```
+
+Para executar, use `--config` apontando para o diretório de configuração:
+
+```powershell
+python C:\qbit-manager\qbit-manager.py --config C:\qbit-manager\config
+```
+
+#### Agendador de Tarefas (Windows)
+
+1. Abra o **Agendador de Tarefas** (`taskschd.msc`)
+2. Clique em **Criar Tarefa Básica**
+3. Defina o gatilho como **Diário** e configure a repetição a cada 5 minutos
+4. Na ação, configure:
+   - **Programa**: `python`
+   - **Argumentos**: `C:\qbit-manager\qbit-manager.py --config C:\qbit-manager\config`
 
 ---
 
 ## Configuração
 
-Edite o `config.py` no diretório de configuração e preencha os valores:
+Edite o `config.py` no diretório de configuração (`/etc/qbit-manager/config.py`).
+
+### Diretórios
+
+```python
+# Onde estão os scripts e a pasta modulos/ (ajuste se instalou em outro local)
+INSTALL_DIR = "/usr/local/lib/qbit-manager"
+
+# Onde o banco de dados será criado
+DB_DIR  = "/var/lib/qbit-manager"
+DB_PATH = f"{DB_DIR}/qbit.db"
+```
 
 ### Conexão com o qBittorrent
 
@@ -115,17 +314,6 @@ Edite o `config.py` no diretório de configuração e preencha os valores:
 QB_URL  = "http://localhost:8080"   # URL do qBittorrent Web UI
 QB_USER = "admin"
 QB_PASS = "senha"
-```
-
-### Banco de dados
-
-```python
-DB_DIR  = "/var/lib/qbit-manager"       # Linux
-DB_PATH = f"{DB_DIR}/qbit.db"
-
-# Windows:
-# DB_DIR  = r"C:\qbit-manager\db"
-# DB_PATH = f"{DB_DIR}\\qbit.db"
 ```
 
 ### Discos monitorados
@@ -190,226 +378,58 @@ TRACKER_RULES = {
 
 **Cross-seed**: se o mesmo torrent existir em múltiplos trackers, só será deletado quando **todos** satisfizerem seu respectivo mínimo de dias.
 
----
+Para gerar o `TRACKER_RULES` automaticamente a partir dos seus torrents, use `--tracker-list` — ele lista todos os trackers com contagem de torrents e gera o bloco pronto para colar no `config.py`.
 
-## Gerando a lista de trackers
+### OpenTelemetry (opcional)
 
-O script `qbit-tracker-list.py` conecta ao qBittorrent, varre todos os torrents e gera automaticamente o bloco `TRACKER_RULES` pronto para colar no `tracker_rules.py`.
-
-```bash
-python3 qbit-tracker-list.py
-```
-
-O script lê as credenciais do mesmo `config.py` usado pelo gerenciador principal. Ajuste o `CONFIG_DIR` no topo do arquivo se necessário:
+Para enviar logs estruturados a um OTEL Collector, adicione ao `config.py`:
 
 ```python
-CONFIG_DIR = "/etc/qbit-manager"          # Linux (padrão)
-# CONFIG_DIR = r"C:\qbit-manager\config"  # Windows
+OTEL_ENDPOINT     = "http://localhost:4318"   # endpoint OTLP/HTTP do collector
+OTEL_SERVICE_NAME = "qbit-manager"            # nome do serviço nos logs
+OTEL_ENVIRONMENT  = "production"              # deployment.environment (ex: production, staging)
+OTEL_ENABLED      = True                      # ativar envio
 ```
 
-### Saída
-
-```
-✅ Configurações carregadas de /etc/qbit-manager/config.py
-✅ Conectado ao qBittorrent
-
-📦 Total de torrents: 843
-
-TRACKER                                            TORRENTS
-------------------------------------------------------------
-tracker1.example.com                                    312
-tracker2.example.com                                    289
-privatehd.example.com                                   150
-
-============================================================
-# Cole em /etc/qbit-manager/tracker_rules.py:
-============================================================
-TRACKER_RULES = {
-    "tracker1.example.com":                      0,  # 312 torrents
-    "tracker2.example.com":                      0,  # 289 torrents
-    "privatehd.example.com":                     0,  # 150 torrents
-}
-============================================================
-
-⚠️  Substitua os 0 pelo número de dias mínimos de seeding de cada tracker.
-```
-
-Após gerar, edite o `tracker_rules.py` substituindo os `0` pelos dias reais e salve em `/etc/qbit-manager/tracker_rules.py`.
-
----
-
-## Agendamento
-
-### Linux (cron)
-
-```bash
-sudo crontab -e
-```
-
-```cron
-# Executa a cada 5 em 5 Minutos
-*/5 * * * *  root  python3 /usr/local/bin/qbit-manager.py >/dev/null 2>&1
-```
-
-### Windows (Agendador de Tarefas)
-
-1. Abra o **Agendador de Tarefas** (`taskschd.msc`)
-2. Clique em **Criar Tarefa Básica**
-3. Defina o gatilho como **Diário** e configure a repetição a cada 5 minutos
-4. Na ação, configure:
-   - **Programa**: `python`
-   - **Argumentos**: `C:\qbit-manager\qbit-manager.py`
+Se não configurar, o sistema funciona normalmente sem OTEL — os logs vão apenas para o console.
 
 ---
 
 ## Notificações
 
-As notificações são implementadas num arquivo separado `notificacao.py`, mantendo o script principal intacto. Copie o arquivo para o diretório de configuração e descomente o canal desejado:
+As notificações são configuradas diretamente no `config.py` — basta definir o tipo e as credenciais:
 
-```bash
-sudo cp notificacao.py /etc/qbit-manager/notificacao.py
-sudo nano /etc/qbit-manager/notificacao.py
+```python
+NOTIFICACAO_TIPO = "telegram"    # ou: discord, slack, ntfy, gotify, pushover, nenhum
+NOTIFICACAO_CONFIG = {
+    "bot_token": "123456:ABC-seu-token-aqui",
+    "chat_id":   "123456789",
+}
 ```
 
-Se o arquivo não existir, o script imprime as notificações apenas no log (sem envio externo).
+O módulo `modulos/notificacao.py` lê essas variáveis e despacha para o canal correto. Não é necessário criar nenhum arquivo separado.
 
-A função deve se chamar `enviar_notificacao()` e aceitar os parâmetros:
-- `titulo` (str) — título da notificação
-- `mensagem` (str) — corpo da mensagem
-- `priority` (int) — `0` = informativo, `1` = crítico
-- `event_type` (str) — tipo do evento, útil para rotear ou formatar por canal
+### Tipos e credenciais
 
-***O Script principal já possui mensagens criadas para cada tipo de situação***
+| Tipo | Credenciais no `NOTIFICACAO_CONFIG` | Como obter |
+|---|---|---|
+| `telegram` | `bot_token`, `chat_id` | Crie bot via [@BotFather](https://t.me/BotFather), `chat_id` via `/getUpdates` |
+| `discord` | `webhook_url` | Configurações do Servidor → Integrações → Webhooks |
+| `slack` | `webhook_url` | [api.slack.com/apps](https://api.slack.com/apps) → Incoming Webhooks |
+| `ntfy` | `url`, `token` (opcional) | [ntfy.sh](https://ntfy.sh) ou self-hosted |
+| `gotify` | `url`, `token` | [gotify.net](https://gotify.net) — painel → Application → Token |
+| `pushover` | `app_token`, `user_key` | [pushover.net](https://pushover.net) |
+| `nenhum` | — | Desativa notificações |
+
+Todos os exemplos com credenciais estão comentados no `config.py`.
 
 ### Mensagens enviadas
 
-| `event_type` | Título | Mensagem |
-|---|---|---|
-| `paused` | `Torrents Status` | `Downloads Pausados` |
-| `restored` | `Torrents Status` | `Download em andamento` |
-| `waiting_paused` | `Downloads Ainda Pausados` | `Verificar sistema.` |
-
-### Eventos notificados
-
-| Evento | Quando |
-|---|---|
-| `paused` | Downloads pausados por disco crítico — enviado 1x por ocorrência |
-| `restored` | Downloads restaurados — sempre enviado |
-| `waiting_paused` | Sistema continua pausado — enviado a cada 60 minutos |
-
----
-
-### Telegram
-
-Crie um bot via [@BotFather](https://t.me/BotFather) e obtenha o `BOT_TOKEN`. Para obter o `CHAT_ID`, envie uma mensagem ao bot e acesse `https://api.telegram.org/bot<TOKEN>/getUpdates`.
-
-```python
-def enviar_notificacao(titulo, mensagem, priority=0):
-    import requests
-    BOT_TOKEN = "123456:ABC-seu-token-aqui"
-    CHAT_ID   = "123456789"
-
-    requests.post(
-        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-        json={
-            "chat_id":    CHAT_ID,
-            "text":       f"*{titulo}*\n\n{mensagem}",
-            "parse_mode": "Markdown"
-        }
-    )
-```
-
----
-
-### Discord
-
-Crie um Webhook em **Configurações do Servidor → Integrações → Webhooks**.
-
-```python
-def enviar_notificacao(titulo, mensagem, priority=0):
-    import requests
-    WEBHOOK_URL = "https://discord.com/api/webhooks/SEU_WEBHOOK_AQUI"
-
-    # Cor: vermelho para crítico, amarelo para aviso, verde para ok
-    cor = {0: 0x2ecc71, 1: 0xe74c3c}.get(priority, 0xf39c12)
-
-    requests.post(WEBHOOK_URL, json={
-        "embeds": [{
-            "title":       titulo,
-            "description": mensagem,
-            "color":       cor
-        }]
-    })
-```
-
----
-
-### Slack
-
-Crie um app em [api.slack.com/apps](https://api.slack.com/apps), ative **Incoming Webhooks** e copie a URL gerada.
-
-```python
-def enviar_notificacao(titulo, mensagem, priority=0):
-    import requests
-    WEBHOOK_URL = "https://hooks.slack.com/services/SEU/WEBHOOK/AQUI"
-
-    requests.post(WEBHOOK_URL, json={
-        "text": f"*{titulo}*\n{mensagem}"
-    })
-```
-
----
-
-### Ntfy
-
-[Ntfy](https://ntfy.sh) é uma solução self-hosted ou pública, sem necessidade de criar conta para uso básico.
-
-```python
-def enviar_notificacao(titulo, mensagem, priority=0):
-    import requests
-    NTFY_URL   = "https://ntfy.sh/seu-topico-aqui"  # ou seu servidor self-hosted
-    PRIORIDADE = {0: "default", 1: "high"}.get(priority, "default")
-
-    requests.post(NTFY_URL, data=mensagem.encode("utf-8"), headers={
-        "Title":    titulo,
-        "Priority": PRIORIDADE
-    })
-```
-
----
-
-### Gotify
-
-[Gotify](https://gotify.net) é uma alternativa self-hosted popular em homelabs.
-
-```python
-def enviar_notificacao(titulo, mensagem, priority=0):
-    import requests
-    GOTIFY_URL   = "https://gotify.seu-servidor.com"
-    GOTIFY_TOKEN = "seu-app-token-aqui"
-
-    requests.post(f"{GOTIFY_URL}/message", json={
-        "title":    titulo,
-        "message":  mensagem,
-        "priority": priority
-    }, headers={"X-Gotify-Key": GOTIFY_TOKEN})
-```
-
----
-
-### Pushover
-
-```python
-def enviar_notificacao(titulo, mensagem, priority=0):
-    import requests
-    requests.post("https://api.pushover.net/1/messages.json", data={
-        "token":    "seu-app-token",
-        "user":     "sua-user-key",
-        "title":    titulo,
-        "message":  mensagem,
-        "priority": priority
-    })
-```
+| `event_type` | Título | Mensagem | Quando |
+|---|---|---|---|
+| `paused` | `Torrents Status` | `Downloads Pausados` | 1x por ocorrência |
+| `restored` | `Torrents Status` | `Download em andamento` | Sempre |
+| `waiting_paused` | `Downloads Ainda Pausados` | `Verificar sistema.` | A cada 60 min |
 
 ---
 
@@ -442,22 +462,3 @@ FROM seed_deletions ORDER BY id DESC LIMIT 20;
 SELECT sent_at, event_type, title
 FROM notifications ORDER BY id DESC LIMIT 20;
 ```
-
----
-
-## Estrutura de arquivos
-
-```
-/etc/qbit-manager/
-├── config.py             # credenciais e configurações
-├── notificacao.py        # implementação do canal de notificação
-└── tracker_rules.py      # regras de seeding por tracker (opcional)
-
-/var/lib/qbit-manager/
-└── qbit.db               # banco SQLite (criado automaticamente)
-
-/usr/local/bin/
-├── qbit-manager.py       # script principal
-└── qbit-tracker-list.py  # gerador da lista de trackers
-```
-
