@@ -378,6 +378,8 @@ TRACKER_RULES = {
 
 **Cross-seed**: se o mesmo torrent existir em múltiplos trackers, só será deletado quando **todos** satisfizerem seu respectivo mínimo de dias.
 
+Para gerar o `TRACKER_RULES` automaticamente a partir dos seus torrents, use `--tracker-list` — ele lista todos os trackers com contagem de torrents e gera o bloco pronto para colar no `config.py`.
+
 ### OpenTelemetry (opcional)
 
 Para enviar logs estruturados a um OTEL Collector, adicione ao `config.py`:
@@ -389,48 +391,6 @@ OTEL_ENABLED      = True                      # ativar envio
 ```
 
 Se não configurar, o sistema funciona normalmente sem OTEL — os logs vão apenas para o console.
-
----
-
-## Gerando a lista de trackers
-
-Use o `--tracker-list` para varrer todos os torrents e gerar o bloco `TRACKER_RULES` pronto para colar no `config.py`:
-
-```bash
-python3 /usr/local/lib/qbit-manager/qbit-manager.py --tracker-list
-
-# ou, se criou o link simbólico:
-qbit-manager --tracker-list
-```
-
-### Saída
-
-```
-🔍 Gerando lista de trackers...
-============================================================
-✅ Conectado ao qBittorrent
-📦 Total de torrents: 843
-
-TRACKER                                            TORRENTS
-------------------------------------------------------------
-tracker1.example.com                                    312
-tracker2.example.com                                    289
-privatehd.example.com                                   150
-
-============================================================
-# Cole no TRACKER_RULES do seu config.py:
-============================================================
-TRACKER_RULES = {
-    "tracker1.example.com":                      0,  # 312 torrents
-    "tracker2.example.com":                      0,  # 289 torrents
-    "privatehd.example.com":                     0,  # 150 torrents
-}
-============================================================
-
-⚠️  Substitua os 0 pelo número de dias mínimos de seeding de cada tracker.
-```
-
-Substitua os `0` pelos dias reais e cole no `TRACKER_RULES` do seu `config.py`.
 
 ---
 
