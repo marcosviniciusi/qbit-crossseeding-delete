@@ -40,26 +40,41 @@ Se já estava pausado na execução anterior:
 
 ---
 
-## Estrutura do projeto
+## Diretórios — onde cada coisa fica
 
-O script é dividido em módulos independentes:
+O sistema usa **3 diretórios** separados, cada um com uma função. Todos são configuráveis via `config.py`:
+
+| Variável | Caminho padrão | O que fica aqui |
+|---|---|---|
+| `INSTALL_DIR` | `/usr/local/lib/qbit-manager` | Scripts + pasta `modulos/` (código do programa) |
+| `CONFIG_DIR`* | `/etc/qbit-manager` | `config.py`, `notificacao.py`, `tracker_rules.py` (suas configs) |
+| `DB_DIR` | `/var/lib/qbit-manager` | `qbit.db` (banco SQLite, criado automaticamente) |
+
+> *`CONFIG_DIR` é definido no topo do `qbit-manager.py` (não no config.py, pois o config.py fica dentro dele).
 
 ```
-qbit-manager-python/            ← repositório (código fonte)
-├── qbit-manager.py              ← entry point (config + conexão + chamada ao orquestrador)
-├── modulos/
+INSTALL_DIR (/usr/local/lib/qbit-manager/)    ← código do programa
+├── qbit-manager.py                            ← entry point (o que o cron executa)
+├── modulos/                                   ← módulos internos (DEVEM estar junto do script)
 │   ├── __init__.py
-│   ├── checagem_disco.py        ← orquestrador: verifica disco → chama limpeza → chama ativação
-│   ├── limpeza.py               ← seed cleaner (cross-seed aware, dry_run)
-│   ├── ativacao.py              ← pausa/restauração de downloads + gerenciamento de trackers
-│   ├── db.py                    ← operações SQLite (init, CRUD, queries de estado)
-│   ├── helpers.py               ← utilitários (verificar espaço, extrair tracker, notificações)
-│   └── otel.py                  ← integração OpenTelemetry (logs via OTLP/HTTP)
-├── config.py                    ← template de configuração
-├── notificacao.py               ← template de notificações (6 canais de exemplo)
-├── qbit-traker-list.py          ← utilitário: gera lista de trackers do qBittorrent
-└── readme.md
+│   ├── checagem_disco.py                      ← orquestrador (disco → limpeza → ativação)
+│   ├── limpeza.py                             ← seed cleaner
+│   ├── ativacao.py                            ← pausa/restauração + gerenciamento de trackers
+│   ├── db.py                                  ← operações SQLite
+│   ├── helpers.py                             ← utilitários compartilhados
+│   └── otel.py                                ← integração OpenTelemetry
+└── qbit-traker-list.py                        ← utilitário: gera lista de trackers
+
+CONFIG_DIR (/etc/qbit-manager/)               ← configuração do usuário
+├── config.py                                  ← credenciais, discos, regras, INSTALL_DIR
+├── notificacao.py                             ← canal de notificação (opcional)
+└── tracker_rules.py                           ← regras de seeding por tracker (opcional)
+
+DB_DIR (/var/lib/qbit-manager/)               ← dados persistentes
+└── qbit.db                                    ← banco SQLite (criado automaticamente)
 ```
+
+**Importante:** a pasta `modulos/` **deve estar dentro do `INSTALL_DIR`**, no mesmo diretório do `qbit-manager.py`. O script usa `INSTALL_DIR` do `config.py` para encontrar os módulos. Se você instalar em outro lugar que não o padrão, basta alterar `INSTALL_DIR` no `config.py`.
 
 ### Fluxo de chamadas entre módulos
 
@@ -81,28 +96,9 @@ qbit-manager.py (entry point)
 ```
 Python 3.8+
 qbittorrent-api
-requests
 ```
 
-### Linux
-
-```bash
-# Ubuntu/Debian
-sudo apt install python3 python3-pip
-pip install qbittorrent-api
-```
-
-### Windows
-
-1. Instale o Python em [python.org/downloads](https://www.python.org/downloads/)
-   - Marque **"Add Python to PATH"** durante a instalação
-2. Instale a dependência:
-
-```powershell
-pip install qbittorrent-api
-```
-
-> O SQLite e o `requests` já vêm embutidos/instalados com o Python.
+> O SQLite e o `requests` já vêm incluídos no Python.
 
 ---
 
@@ -118,133 +114,108 @@ Antes de usar o script, ajuste as opções do qBittorrent em **Tools → Options
 
 ---
 
-## Instalação
+## Instalação — Linux
 
-### Linux — Passo a passo
-
-O sistema usa dois diretórios separados: um para os **scripts** e outro para a **configuração**.
-
-#### 1. Instalar dependências
+### 1. Instalar dependências
 
 ```bash
-sudo apt install python3 python3-pip
+sudo apt install python3 python3-pip    # Ubuntu/Debian
 pip install qbittorrent-api
 ```
 
-#### 2. Criar diretórios
+### 2. Criar os 3 diretórios
 
 ```bash
-# Diretório de configuração (credenciais, regras, notificações)
+# INSTALL_DIR — onde ficam os scripts e módulos
+sudo mkdir -p /usr/local/lib/qbit-manager/modulos
+
+# CONFIG_DIR — onde fica a configuração do usuário
 sudo mkdir -p /etc/qbit-manager
 
-# Diretório do banco de dados (criado automaticamente, mas bom garantir)
+# DB_DIR — onde fica o banco de dados (criado automaticamente, mas garantir permissão)
 sudo mkdir -p /var/lib/qbit-manager
-
-# Diretório dos scripts + módulos
-sudo mkdir -p /usr/local/lib/qbit-manager/modulos
 ```
 
-#### 3. Copiar os scripts e módulos
+### 3. Copiar scripts + módulos para INSTALL_DIR
 
 ```bash
-# Script principal (entry point)
-sudo cp qbit-manager.py /usr/local/lib/qbit-manager/qbit-manager.py
+# Script principal
+sudo cp qbit-manager.py /usr/local/lib/qbit-manager/
+sudo chmod +x /usr/local/lib/qbit-manager/qbit-manager.py
 
-# Módulos internos
-sudo cp modulos/__init__.py        /usr/local/lib/qbit-manager/modulos/__init__.py
-sudo cp modulos/db.py              /usr/local/lib/qbit-manager/modulos/db.py
-sudo cp modulos/helpers.py         /usr/local/lib/qbit-manager/modulos/helpers.py
-sudo cp modulos/otel.py            /usr/local/lib/qbit-manager/modulos/otel.py
-sudo cp modulos/limpeza.py         /usr/local/lib/qbit-manager/modulos/limpeza.py
-sudo cp modulos/ativacao.py        /usr/local/lib/qbit-manager/modulos/ativacao.py
-sudo cp modulos/checagem_disco.py  /usr/local/lib/qbit-manager/modulos/checagem_disco.py
+# Módulos internos (DEVEM ficar dentro de INSTALL_DIR/modulos/)
+sudo cp modulos/*.py /usr/local/lib/qbit-manager/modulos/
 
 # Utilitário de lista de trackers
-sudo cp qbit-traker-list.py /usr/local/lib/qbit-manager/qbit-traker-list.py
-
-# Tornar executável
-sudo chmod +x /usr/local/lib/qbit-manager/qbit-manager.py
+sudo cp qbit-traker-list.py /usr/local/lib/qbit-manager/
 ```
 
-#### 4. Criar link simbólico (atalho para rodar de qualquer lugar)
+### 4. Copiar configuração para CONFIG_DIR
+
+```bash
+# Template de configuração — edite com seus dados reais
+sudo cp config.py /etc/qbit-manager/config.py
+sudo chmod 600 /etc/qbit-manager/config.py    # proteger credenciais
+sudo nano /etc/qbit-manager/config.py
+
+# (Opcional) Notificações — descomente o canal desejado
+sudo cp notificacao.py /etc/qbit-manager/notificacao.py
+```
+
+### 5. Verificar o INSTALL_DIR no config.py
+
+Abra `/etc/qbit-manager/config.py` e confirme que `INSTALL_DIR` aponta para onde você colocou os scripts:
+
+```python
+# Se instalou no local padrão, não precisa mudar nada:
+INSTALL_DIR = "/usr/local/lib/qbit-manager"
+
+# Se instalou em outro lugar, ajuste:
+# INSTALL_DIR = "/opt/qbit-manager"
+# INSTALL_DIR = "/home/usuario/qbit-manager"
+```
+
+### 6. (Opcional) Criar atalhos
 
 ```bash
 sudo ln -sf /usr/local/lib/qbit-manager/qbit-manager.py /usr/local/bin/qbit-manager
 sudo ln -sf /usr/local/lib/qbit-manager/qbit-traker-list.py /usr/local/bin/qbit-traker-list
 ```
 
-#### 5. Copiar e editar configuração
-
-```bash
-# Copiar template de configuração
-sudo cp config.py /etc/qbit-manager/config.py
-
-# Proteger credenciais
-sudo chmod 600 /etc/qbit-manager/config.py
-
-# Editar com seus dados reais
-sudo nano /etc/qbit-manager/config.py
-```
-
-#### 6. (Opcional) Configurar notificações
-
-```bash
-sudo cp notificacao.py /etc/qbit-manager/notificacao.py
-sudo nano /etc/qbit-manager/notificacao.py
-# Descomente o canal desejado (Telegram, Discord, etc.)
-```
-
-#### 7. Agendar no cron
+### 7. Agendar no cron
 
 ```bash
 sudo crontab -e
 ```
-
-Adicione:
 
 ```cron
 # Executa a cada 5 minutos
 */5 * * * * python3 /usr/local/lib/qbit-manager/qbit-manager.py >/dev/null 2>&1
 ```
 
-#### Resultado final no Linux
+### Instalou em outro local?
 
-```
-/usr/local/lib/qbit-manager/         ← scripts + módulos
-├── qbit-manager.py                   ← entry point (executado pelo cron)
-├── modulos/
-│   ├── __init__.py
-│   ├── checagem_disco.py
-│   ├── limpeza.py
-│   ├── ativacao.py
-│   ├── db.py
-│   ├── helpers.py
-│   └── otel.py
-└── qbit-traker-list.py
+Se não usou o caminho padrão `/usr/local/lib/qbit-manager`, basta alterar **uma variável** no `config.py`:
 
-/etc/qbit-manager/                   ← configuração (editável pelo usuário)
-├── config.py                         ← credenciais, discos, regras
-├── notificacao.py                    ← canal de notificação (opcional)
-└── tracker_rules.py                  ← regras de seeding por tracker (opcional)
-
-/var/lib/qbit-manager/               ← dados (criado automaticamente)
-└── qbit.db                           ← banco SQLite
-
-/usr/local/bin/                      ← atalhos (links simbólicos)
-├── qbit-manager → /usr/local/lib/qbit-manager/qbit-manager.py
-└── qbit-traker-list → /usr/local/lib/qbit-manager/qbit-traker-list.py
+```python
+# Exemplo: instalou em /opt
+INSTALL_DIR = "/opt/qbit-manager"
 ```
 
-### Windows
+O script lê esse valor e encontra a pasta `modulos/` automaticamente. Não precisa mudar nada nos módulos.
+
+---
+
+## Instalação — Windows
 
 ```powershell
 # 1. Criar diretórios
-mkdir C:\qbit-manager
-mkdir C:\qbit-manager\modulos
-mkdir C:\qbit-manager\config
-mkdir C:\qbit-manager\db
+mkdir C:\qbit-manager              # INSTALL_DIR (scripts + modulos)
+mkdir C:\qbit-manager\modulos      # módulos internos
+mkdir C:\qbit-manager\config       # CONFIG_DIR (configuração)
+mkdir C:\qbit-manager\db           # DB_DIR (banco de dados)
 
-# 2. Copiar scripts e módulos
+# 2. Copiar scripts + módulos
 copy qbit-manager.py           C:\qbit-manager\
 copy modulos\*.py               C:\qbit-manager\modulos\
 
@@ -262,8 +233,9 @@ CONFIG_DIR = r"C:\qbit-manager\config"
 E no `config.py`:
 
 ```python
-DB_DIR  = r"C:\qbit-manager\db"
-DB_PATH = f"{DB_DIR}\\qbit.db"
+INSTALL_DIR = r"C:\qbit-manager"
+DB_DIR      = r"C:\qbit-manager\db"
+DB_PATH     = f"{DB_DIR}\\qbit.db"
 ```
 
 #### Agendador de Tarefas (Windows)
@@ -281,23 +253,23 @@ DB_PATH = f"{DB_DIR}\\qbit.db"
 
 Edite o `config.py` no diretório de configuração (`/etc/qbit-manager/config.py`).
 
+### Diretórios
+
+```python
+# Onde estão os scripts e a pasta modulos/ (ajuste se instalou em outro local)
+INSTALL_DIR = "/usr/local/lib/qbit-manager"
+
+# Onde o banco de dados será criado
+DB_DIR  = "/var/lib/qbit-manager"
+DB_PATH = f"{DB_DIR}/qbit.db"
+```
+
 ### Conexão com o qBittorrent
 
 ```python
 QB_URL  = "http://localhost:8080"   # URL do qBittorrent Web UI
 QB_USER = "admin"
 QB_PASS = "senha"
-```
-
-### Banco de dados
-
-```python
-DB_DIR  = "/var/lib/qbit-manager"       # Linux
-DB_PATH = f"{DB_DIR}/qbit.db"
-
-# Windows:
-# DB_DIR  = r"C:\qbit-manager\db"
-# DB_PATH = f"{DB_DIR}\\qbit.db"
 ```
 
 ### Discos monitorados

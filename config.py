@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 
 # =============================================================================
-# config.py — Configurações do qBittorrent Unified Manager
-# Copie este arquivo para config.py e preencha com seus valores reais
+# config.py — Configurações do qBittorrent Manager
+# Copie este arquivo para /etc/qbit-manager/config.py e preencha seus valores
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Banco de dados
+# Diretórios do sistema
 # -----------------------------------------------------------------------------
+# INSTALL_DIR → onde estão os scripts e a pasta modulos/
+#   O script principal (qbit-manager.py) e a pasta modulos/ devem estar aqui.
+#   Altere se instalou em outro local.
+INSTALL_DIR = "/usr/local/lib/qbit-manager"
+
+# DB_DIR → onde o banco SQLite será criado
 DB_DIR  = "/var/lib/qbit-manager"
 DB_PATH = f"{DB_DIR}/qbit.db"
 

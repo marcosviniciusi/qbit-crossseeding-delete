@@ -3,31 +3,30 @@
 # qbit-manager.py — Entry point
 # Gerenciamento modular: checagem de disco -> limpeza -> ativacao
 #
-# Estrutura:
-#   qbit-manager.py          <- voce esta aqui (entry point)
-#   modulos/
-#     db.py                  <- banco de dados SQLite
-#     helpers.py             <- utilitarios compartilhados
-#     otel.py                <- OpenTelemetry logging
-#     limpeza.py             <- seed cleaner
-#     ativacao.py            <- ativacao de downloads + trackers
-#     checagem_disco.py      <- orquestrador (disco -> limpeza -> ativacao)
+# Diretorios:
+#   CONFIG_DIR  → /etc/qbit-manager           (config.py, notificacao.py, tracker_rules.py)
+#   INSTALL_DIR → /usr/local/lib/qbit-manager  (este script + pasta modulos/)
+#   DB_DIR      → /var/lib/qbit-manager        (qbit.db)
+#
+# Todos configuraveis via config.py
 
+import os
 import sys
 import qbittorrentapi
 import requests
 
-# Diretorio de configuracao
+# ── 1. Carregar config.py ────────────────────────────────────────────────────
+# CONFIG_DIR: onde fica o config.py (credenciais, discos, regras)
 CONFIG_DIR = "/etc/qbit-manager"
 
 if CONFIG_DIR not in sys.path:
     sys.path.insert(0, CONFIG_DIR)
 
-# Importar configuracoes principais
 try:
     from config import *
 except ImportError:
     print(f"⚠️  Crie um arquivo config.py em {CONFIG_DIR}!")
+    print(f"   Copie o template: sudo cp config.py {CONFIG_DIR}/config.py")
     QB_URL                    = 'https://torrent.exemplo.com'
     QB_USER                   = 'admin'
     QB_PASS                   = 'senha'
@@ -36,6 +35,7 @@ except ImportError:
     MIN_DOWNLOADS_PER_TRACKER = 4
     MIN_TORRENTS_PER_TRACKER  = 4
     SEED_CLEANER_DRY_RUN      = True
+    INSTALL_DIR               = os.path.dirname(os.path.abspath(__file__))
     PATHS = {
         "p2p": {
             "path":        "/mnt/p2p/",
@@ -54,14 +54,25 @@ except ImportError:
     }
     TRACKER_RULES = {}
 
-# Importar tracker_rules.py separado (sobrescreve TRACKER_RULES do config se existir)
+# ── 2. Resolver INSTALL_DIR (onde estao os modulos) ──────────────────────────
+# Se definido no config.py, usa esse valor. Senao, usa o diretorio deste script.
+try:
+    INSTALL_DIR
+except NameError:
+    INSTALL_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Adicionar INSTALL_DIR ao path para encontrar a pasta modulos/
+if INSTALL_DIR not in sys.path:
+    sys.path.insert(0, INSTALL_DIR)
+
+# ── 3. Importar tracker_rules.py separado (opcional, sobrescreve config) ─────
 try:
     from tracker_rules import TRACKER_RULES
     print("✅ Regras de tracker carregadas de tracker_rules.py")
 except ImportError:
     pass
 
-# Banco de dados — fallback caso nao estejam no config
+# ── 4. Fallback para DB_DIR/DB_PATH ─────────────────────────────────────────
 try:
     DB_DIR
 except NameError:
@@ -71,7 +82,7 @@ try:
 except NameError:
     DB_PATH = f"{DB_DIR}/qbit.db"
 
-# Importar modulos internos
+# ── 5. Importar modulos internos (de INSTALL_DIR/modulos/) ──────────────────
 from modulos.db import init_db
 from modulos.otel import configurar_otel
 from modulos.checagem_disco import executar_checagem
