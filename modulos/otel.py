@@ -138,8 +138,10 @@ def log_run(run_id, status, resumo):
 
 def flush():
     """
-    Envia todos os logs acumulados como um unico registro para o OTEL Collector.
-    O body contem o log completo do run em formato estruturado.
+    Envia todos os logs acumulados como um unico logRecord para o OTEL Collector.
+    O body contem todas as mensagens do run.
+    Atributos de entries com chave 'disco' sao prefixados com o nome do disco
+    para evitar sobrescrita (ex: p2p.livre_gb, videos.livre_gb).
     Limpa o buffer apos o envio.
 
     Retorna True se enviou com sucesso, False se nao.
@@ -151,20 +153,24 @@ def flush():
         _buffer.clear()
         return False
 
-    # Montar o body: log completo do run
+    # Montar body e atributos sem perder dados
     linhas = []
     all_attrs = {}
     for entry in _buffer:
         prefix = f"[{entry['level'].upper()}]"
         linhas.append(f"{prefix} {entry['msg']}")
-        # Acumular attrs unicos (ultimo valor ganha se repetir)
+
+        # Se a entry tem 'disco', prefixar attrs com o nome do disco
+        disco = entry["attrs"].get("disco")
         for k, v in entry["attrs"].items():
-            all_attrs[k] = v
+            if disco and k != "disco":
+                all_attrs[f"{disco}.{k}"] = v
+            else:
+                all_attrs[k] = v
 
     body_text = "\n".join(linhas)
     now_ns    = int(time.time() * 1e9)
 
-    # Attributes: combinar todos os attrs + metadata
     attributes = [
         {"key": k, "value": {"stringValue": str(v)}}
         for k, v in all_attrs.items()
