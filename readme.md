@@ -16,6 +16,54 @@ Gerenciamento automatizado do qBittorrent via cron: monitoramento de espaço em 
 
 ---
 
+## Uso
+
+```bash
+# Execução normal (cron)
+python3 qbit-manager.py
+
+# Verificar espaço em disco (sem executar ações)
+python3 qbit-manager.py --check-disk
+
+# Listar torrents elegíveis para remoção (dry run)
+python3 qbit-manager.py --check-torrent
+
+# Executar seed cleaner (respeita tempo de seed e cross-seed)
+python3 qbit-manager.py --erase-torrent
+
+# Gerar bloco TRACKER_RULES a partir dos torrents atuais
+python3 qbit-manager.py --tracker-list
+
+# Testar envio de notificação
+python3 qbit-manager.py --test-notification
+
+# Testar envio de log ao OTEL Collector
+python3 qbit-manager.py --check-send-log
+
+# Validar se a configuração está correta
+python3 qbit-manager.py --check-config
+```
+
+### Flags globais
+
+```bash
+# Usar diretório de configuração diferente do padrão
+python3 qbit-manager.py --config /caminho/para/config
+
+# Usar diretório de módulos diferente do INSTALL_DIR
+python3 qbit-manager.py --modules /caminho/para/modulos
+
+# Combinar: config custom + verificar disco
+python3 qbit-manager.py --config /home/user/meu-config --check-disk
+```
+
+| Flag | Padrão | O que faz |
+|---|---|---|
+| `--config PATH` | `/etc/qbit-manager` | Diretório onde fica o `config.py` |
+| `--modules PATH` | `INSTALL_DIR` do config | Diretório onde ficam os scripts + `modulos/` |
+
+---
+
 ## Como funciona
 
 ```
@@ -189,14 +237,17 @@ sudo crontab -e
 
 ### Instalou em outro local?
 
-Se não usou o caminho padrão `/usr/local/lib/qbit-manager`, basta alterar **uma variável** no `config.py`:
+Duas opções:
 
+**Opção 1** — Alterar `INSTALL_DIR` no `config.py`:
 ```python
-# Exemplo: instalou em /opt
 INSTALL_DIR = "/opt/qbit-manager"
 ```
 
-O script lê esse valor e encontra a pasta `modulos/` automaticamente. Não precisa mudar nada nos módulos.
+**Opção 2** — Usar flags na linha de comando (sem alterar nenhum arquivo):
+```bash
+python3 /opt/qbit-manager/qbit-manager.py --config /meu/config --modules /opt/qbit-manager
+```
 
 ---
 
@@ -217,18 +268,18 @@ copy modulos\*.py               C:\qbit-manager\modulos\
 copy config.py                  C:\qbit-manager\config\config.py
 ```
 
-Edite o `CONFIG_DIR` no topo do `qbit-manager.py`:
-
-```python
-CONFIG_DIR = r"C:\qbit-manager\config"
-```
-
-E no `config.py`:
+Edite o `config.py` com os caminhos do Windows:
 
 ```python
 INSTALL_DIR = r"C:\qbit-manager"
 DB_DIR      = r"C:\qbit-manager\db"
 DB_PATH     = f"{DB_DIR}\\qbit.db"
+```
+
+Para executar, use `--config` apontando para o diretório de configuração:
+
+```powershell
+python C:\qbit-manager\qbit-manager.py --config C:\qbit-manager\config
 ```
 
 #### Agendador de Tarefas (Windows)
@@ -238,7 +289,7 @@ DB_PATH     = f"{DB_DIR}\\qbit.db"
 3. Defina o gatilho como **Diário** e configure a repetição a cada 5 minutos
 4. Na ação, configure:
    - **Programa**: `python`
-   - **Argumentos**: `C:\qbit-manager\qbit-manager.py`
+   - **Argumentos**: `C:\qbit-manager\qbit-manager.py --config C:\qbit-manager\config`
 
 ---
 
