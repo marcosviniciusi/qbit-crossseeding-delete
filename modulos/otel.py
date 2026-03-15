@@ -138,8 +138,10 @@ def log_run(run_id, status, resumo):
 
 def flush():
     """
-    Envia todos os logs acumulados como logRecords individuais para o OTEL Collector.
-    Cada entry do buffer vira um logRecord separado com seus proprios atributos.
+    Envia todos os logs acumulados como um unico logRecord para o OTEL Collector.
+    O body contem todas as mensagens do run.
+    Atributos de entries com chave 'disco' sao prefixados com o nome do disco
+    para evitar sobrescrita (ex: p2p.livre_gb, videos.livre_gb).
     Limpa o buffer apos o envio.
 
     Retorna True se enviou com sucesso, False se nao.
@@ -151,24 +153,40 @@ def flush():
         _buffer.clear()
         return False
 
-    # Cada entry vira um logRecord individual
-    log_records = []
+    # Montar body e atributos sem perder dados
+    linhas = []
+    all_attrs = {}
     for entry in _buffer:
-        severity = _SEVERITY_MAP.get(entry["level"], 9)
-        ts_ns = str(int(entry["ts"] * 1e9))
+        prefix = f"[{entry['level'].upper()}]"
+        linhas.append(f"{prefix} {entry['msg']}")
 
-        attributes = [
-            {"key": k, "value": {"stringValue": str(v)}}
-            for k, v in entry["attrs"].items()
-        ]
+        # Se a entry tem 'disco', prefixar attrs com o nome do disco
+        disco = entry["attrs"].get("disco")
+        for k, v in entry["attrs"].items():
+            if disco and k != "disco":
+                all_attrs[f"{disco}.{k}"] = v
+            else:
+                all_attrs[k] = v
 
-        log_records.append({
-            "timeUnixNano":   ts_ns,
-            "severityNumber": severity,
-            "severityText":   entry["level"].upper(),
-            "body":           {"stringValue": entry["msg"]},
-            "attributes":     attributes,
-        })
+    body_text = "\n".join(linhas)
+    now_ns    = int(time.time() * 1e9)
+
+    attributes = [
+        {"key": k, "value": {"stringValue": str(v)}}
+        for k, v in all_attrs.items()
+    ]
+    attributes.append({
+        "key": "log.entry_count",
+        "value": {"stringValue": str(len(_buffer))}
+    })
+
+    log_record = {
+        "timeUnixNano":   str(now_ns),
+        "severityNumber": _max_severity["number"],
+        "severityText":   _max_severity["level"].upper(),
+        "body":           {"stringValue": body_text},
+        "attributes":     attributes,
+    }
 
     payload = {
         "resourceLogs": [{
@@ -182,7 +200,7 @@ def flush():
             },
             "scopeLogs": [{
                 "scope": {"name": "qbit-manager"},
-                "logRecords": log_records,
+                "logRecords": [log_record],
             }]
         }]
     }
