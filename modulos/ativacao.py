@@ -34,6 +34,39 @@ def forcar_start_checking(client, checking_torrents):
     return forcados
 
 
+def forcar_seeding_torrents(client):
+    """Aplica force_start em torrents em estado de seeding (uploading, stalledUP, etc)
+    para evitar que fiquem stalled"""
+    seeding_torrents = []
+    for t in client.torrents_info():
+        if t.state in ('uploading', 'stalledUP', 'queuedUP', 'checkingUP', 'forcedUP'):
+            seeding_torrents.append(t)
+
+    if not seeding_torrents:
+        return 0
+
+    forcados = 0
+    print(f"\n⚡ Force start em {len(seeding_torrents)} torrents em seeding...")
+    for t in seeding_torrents:
+        try:
+            # Só aplicar force se ainda não estiver com force ativo
+            if not getattr(t, 'force_start', False):
+                client.torrents_set_force_start(torrent_hashes=t.hash, enable=True)
+                print(f"   ⚡ {t.name[:55]} [{t.state}]")
+                forcados += 1
+                time.sleep(0.1)
+        except Exception as e:
+            print(f"   ❌ {t.name[:30]}: {e}")
+
+    if forcados > 0:
+        print(f"   ✅ {forcados} torrents em seeding com force start aplicado")
+        log(f"Force start seeding: {forcados} torrents", forcados_seeding=forcados)
+    else:
+        print(f"   ℹ️  Todos os {len(seeding_torrents)} torrents em seeding já estão com force ativo")
+
+    return forcados
+
+
 def executar_pausa(client, conn, run_id, espacos, moving_count, moving_torrents,
                    enviar_notificacao_fn):
     """Pausa downloads ativos quando disco esta critico"""

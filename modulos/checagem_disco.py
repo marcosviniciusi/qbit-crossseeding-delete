@@ -25,6 +25,7 @@ from modulos.helpers import (
 from modulos.limpeza import executar_seed_cleaner
 from modulos.ativacao import (
     forcar_start_checking,
+    forcar_seeding_torrents,
     executar_pausa,
     executar_restauracao,
     gerenciar_trackers,
@@ -91,6 +92,7 @@ def executar_checagem(client, conn, paths_config, tracker_rules,
     # PASSO 5: Logica principal baseada no estado anterior
     # ------------------------------------------------------------------
     forcados_checking      = 0
+    forcados_seeding       = 0
     seeding_deletados      = 0
     total_forcados         = 0
     total_ativados         = 0
@@ -219,7 +221,12 @@ def executar_checagem(client, conn, paths_config, tracker_rules,
             pode_gerenciar_trackers = True
 
     # ------------------------------------------------------------------
-    # PASSO 6: Gerenciar trackers
+    # PASSO 6: Force em torrents de seeding
+    # ------------------------------------------------------------------
+    forcados_seeding = forcar_seeding_torrents(client)
+
+    # ------------------------------------------------------------------
+    # PASSO 7: Gerenciar trackers
     # ------------------------------------------------------------------
     if pode_gerenciar_trackers:
         total_forcados, total_ativados = gerenciar_trackers(
@@ -228,7 +235,7 @@ def executar_checagem(client, conn, paths_config, tracker_rules,
         print(f"\n⏭️  Gerenciamento de trackers PAUSADO")
 
     # ------------------------------------------------------------------
-    # PASSO 7: Fechar run
+    # PASSO 8: Fechar run
     # ------------------------------------------------------------------
     atualizar_run(conn, run_id,
                   status=           'active' if pode_gerenciar_trackers else 'paused',
@@ -253,6 +260,8 @@ def executar_checagem(client, conn, paths_config, tracker_rules,
     print(f"📦 Checking+Moving: {checking_moving_total}")
     if forcados_checking:
         print(f"⚡ Force start checking: {forcados_checking}")
+    if forcados_seeding:
+        print(f"⚡ Force start seeding: {forcados_seeding}")
     if seeding_deletados:
         print(f"🗑️  Seed cleaner: {seeding_deletados} {'(DRY RUN)' if seed_cleaner_dry_run else 'deletados'}")
     if total_forcados or total_ativados:
@@ -264,6 +273,7 @@ def executar_checagem(client, conn, paths_config, tracker_rules,
     log_run(run_id, 'active' if pode_gerenciar_trackers else 'paused', {
         "checking_moving": checking_moving_total,
         "forcados_checking": forcados_checking,
+        "forcados_seeding": forcados_seeding,
         "seeding_deletados": seeding_deletados,
         "tracker_forcados": total_forcados,
         "tracker_ativados": total_ativados,
